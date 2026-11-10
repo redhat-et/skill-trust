@@ -1,0 +1,13 @@
+{
+  "apiVersion": "skill-trust.policy/v1",
+  "name": "fixtures",
+  "trustRoots": {},
+  "signers": [
+    {
+      "name": "fixtures-key",
+      "mode": "key",
+      "publicKey": { "path": "fixtures.pub" },
+      "requireTransparencyLog": false
+    }
+  ]
+}

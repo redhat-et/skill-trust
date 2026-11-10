@@ -1,0 +1,89 @@
+{
+  "apiVersion": "skill-trust.fixtures/v1",
+  "name": "signed-skill-fixtures",
+  "description": "Expected verification results for the committed fixture suite. Each case copies valid-complete (including its .skill-trust control files), applies one mutation, and verifies against policy.json. The manifestDigest golden value is recomputed from the checked-out bytes on every platform: content digests and path rules are identical everywhere, and the executable bit is preserved by git on POSIX checkouts (see docs/MANIFEST.md).",
+  "fixture": "valid-complete",
+  "manifestDigest": "e65d911b1df917c63b91c64c83d35355193d6f3e70d1c2361e596ae17fbc7b51",
+  "cases": [
+    {
+      "name": "valid",
+      "description": "the untouched signed fixture",
+      "expect": { "decision": "allow", "matchedSigner": "fixtures-key" }
+    },
+    {
+      "name": "modify-skill-md",
+      "mutation": { "op": "write", "path": "SKILL.md", "content": "---\nname: fixture-complete\ndescription: tampered\n---\n\nModified instructions.\n" },
+      "expect": { "decision": "block", "code": "ST-CONTENT-MISMATCH" }
+    },
+    {
+      "name": "modify-bash-helper",
+      "mutation": { "op": "write", "path": "scripts/run.sh", "content": "#!/usr/bin/env bash\necho tampered\n" },
+      "expect": { "decision": "block", "code": "ST-CONTENT-MISMATCH" }
+    },
+    {
+      "name": "modify-python-helper",
+      "mutation": { "op": "write", "path": "scripts/util.py", "content": "print(\"tampered\")\n" },
+      "expect": { "decision": "block", "code": "ST-CONTENT-MISMATCH" }
+    },
+    {
+      "name": "modify-javascript-helper",
+      "mutation": { "op": "write", "path": "scripts/helper.js", "content": "console.log(\"tampered\")\n" },
+      "expect": { "decision": "block", "code": "ST-CONTENT-MISMATCH" }
+    },
+    {
+      "name": "modify-reference",
+      "mutation": { "op": "write", "path": "references/ref.md", "content": "# Tampered reference\n" },
+      "expect": { "decision": "block", "code": "ST-CONTENT-MISMATCH" }
+    },
+    {
+      "name": "modify-asset",
+      "mutation": { "op": "write", "path": "assets/data.txt", "content": "tampered asset\n" },
+      "expect": { "decision": "block", "code": "ST-CONTENT-MISMATCH" }
+    },
+    {
+      "name": "modify-hidden-file",
+      "mutation": { "op": "write", "path": ".hidden/config", "content": "tampered hidden configuration\n" },
+      "expect": { "decision": "block", "code": "ST-CONTENT-MISMATCH" }
+    },
+    {
+      "name": "add-file",
+      "mutation": { "op": "write", "path": "scripts/added-after-signing.py", "content": "print(\"added\")\n" },
+      "expect": { "decision": "block", "code": "ST-CONTENT-MISMATCH" }
+    },
+    {
+      "name": "delete-file",
+      "mutation": { "op": "remove", "path": "assets/data.txt" },
+      "expect": { "decision": "block", "code": "ST-CONTENT-MISMATCH" }
+    },
+    {
+      "name": "rename-file",
+      "mutation": { "op": "rename", "path": "references/ref.md", "to": "references/renamed.md" },
+      "expect": { "decision": "block", "code": "ST-CONTENT-MISMATCH" }
+    },
+    {
+      "name": "unset-executable-bit",
+      "mutation": { "op": "chmod", "path": "scripts/run.sh", "mode": 420 },
+      "expect": { "decision": "block", "code": "ST-CONTENT-MISMATCH" }
+    },
+    {
+      "name": "set-executable-bit",
+      "mutation": { "op": "chmod", "path": "scripts/util.py", "mode": 493 },
+      "expect": { "decision": "block", "code": "ST-CONTENT-MISMATCH" }
+    },
+    {
+      "name": "remove-control-directory",
+      "mutation": { "op": "remove-all", "path": ".skill-trust" },
+      "expect": { "decision": "block", "code": "ST-METADATA-MISSING" }
+    },
+    {
+      "name": "remove-bundle",
+      "mutation": { "op": "remove", "path": ".skill-trust/bundle.sigstore.json" },
+      "expect": { "decision": "block", "code": "ST-METADATA-MISSING" }
+    },
+    {
+      "name": "tamper-embedded-manifest",
+      "mutation": { "op": "corrupt-manifest" },
+      "expect": { "decision": "block", "code": "ST-CONTENT-MISMATCH" }
+    }
+  ]
+}

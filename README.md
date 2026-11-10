@@ -186,7 +186,9 @@ is:
 5. preflight enforcement contract;
 6. OpenCode adapter;
 7. GitHub Actions and public test signing;
-8. tamper and cross-platform test fixtures; and
+8. tamper and cross-platform test fixtures
+   ([`testdata/fixtures/`](testdata/fixtures/), with expected allow/block
+   results, running on Linux and macOS CI); and
 9. key-based signing and enterprise lifecycle controls.
 
 ## Security limitations
