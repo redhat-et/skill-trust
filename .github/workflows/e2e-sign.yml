@@ -1,0 +1,213 @@
+name: e2e-sign
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  # The GitHub OIDC certificate SAN for this workflow on main.
+  WORKFLOW_IDENTITY: https://github.com/redhat-et/skill-trust/.github/workflows/e2e-sign.yml@refs/heads/main
+
+jobs:
+  public-sigstore:
+    name: keyless e2e (public Sigstore)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        run: go build -o /tmp/skill-trust ./cmd/skill-trust
+
+      - name: Fixture
+        run: |
+          mkdir -p demo-skill/scripts
+          printf -- '---\nname: e2e-demo\n---\nSigned in CI.\n' > demo-skill/SKILL.md
+          printf '#!/usr/bin/env bash\necho hello\n' > demo-skill/scripts/run.sh
+          chmod +x demo-skill/scripts/run.sh
+          printf 'print("hi")\n' > demo-skill/scripts/util.py
+
+      - name: Sign (keyless, public Sigstore)
+        run: |
+          cat > services.json <<EOF
+          {
+            "name": "sigstore-public",
+            "fulcioURL": "https://fulcio.sigstore.dev",
+            "rekorURL": "https://rekor.sigstore.dev",
+            "tsaURL": "https://timestamp.sigstore.dev/api/v1/timestamp",
+            "oidcIssuer": "https://oauth2.sigstore.dev/auth"
+          }
+          EOF
+          /tmp/skill-trust sign demo-skill --id-token github --services services.json --json | tee sign-result.json
+          test "$(jq -r .hasTlogEntry)" = true
+          test "$(jq -r .identity)" = "$WORKFLOW_IDENTITY"
+          test "$(jq -r .issuer)" = "https://token.actions.githubusercontent.com"
+
+      - name: Inspect
+        run: /tmp/skill-trust inspect demo-skill
+
+      - name: Verify (this workflow, public trust root, tlog required)
+        run: |
+          cat > policy.json <<EOF
+          {
+            "apiVersion": "skill-trust.policy/v1",
+            "trustRoots": {"sigstore": {"type": "sigstore-public"}},
+            "signers": [{
+              "name": "ci-workflow",
+              "mode": "keyless",
+              "certificate": {
+                "identities": ["$WORKFLOW_IDENTITY"],
+                "issuer": "https://token.actions.githubusercontent.com"
+              },
+              "trustRoot": "sigstore",
+              "requireTransparencyLog": true
+            }]
+          }
+          EOF
+          /tmp/skill-trust verify demo-skill --policy policy.json --json | tee verify-result.json
+          test "$(jq -r .decision)" = allow
+          test "$(jq -r '.signatures[0].matched')" = true
+
+      - name: Verify (provenance claims)
+        run: |
+          cat > policy-provenance.json <<EOF
+          {
+            "apiVersion": "skill-trust.policy/v1",
+            "trustRoots": {"sigstore": {"type": "sigstore-public"}},
+            "signers": [{
+              "name": "ci-workflow",
+              "mode": "keyless",
+              "certificate": {
+                "identityRegexp": "^https://github\\\\.com/redhat-et/skill-trust/\\\\.github/workflows/e2e-sign\\\\.yml@",
+                "issuer": "https://token.actions.githubusercontent.com"
+              },
+              "provenance": {
+                "sourceRepository": "redhat-et/skill-trust",
+                "workflowName": ".github/workflows/e2e-sign.yml"
+              },
+              "trustRoot": "sigstore",
+              "requireTransparencyLog": true
+            }]
+          }
+          EOF
+          /tmp/skill-trust verify demo-skill --policy policy-provenance.json
+
+      - name: Tamper must block
+        run: |
+          printf 'print("evil")\n' > demo-skill/scripts/util.py
+          set +e
+          /tmp/skill-trust verify demo-skill --policy policy.json --json > tamper-result.json
+          code=$?
+          set -e
+          test "$code" = 1
+          test "$(jq -r .decision)" = block
+          jq -e '.findings[] | select(.code == "ST-CONTENT-MISMATCH")' tamper-result.json > /dev/null
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-sigstore-evidence
+          path: |
+            sign-result.json
+            verify-result.json
+            tamper-result.json
+            demo-skill/.skill-trust/
+          if-no-files-found: warn
+
+  rhtas:
+    name: keyless e2e (RHTAS)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        run: go build -o /tmp/skill-trust ./cmd/skill-trust
+
+      - name: Fixture
+        run: |
+          mkdir -p demo-skill/scripts
+          printf -- '---\nname: e2e-demo\n---\nSigned in CI against RHTAS.\n' > demo-skill/SKILL.md
+          printf '#!/usr/bin/env bash\necho hello\n' > demo-skill/scripts/run.sh
+          chmod +x demo-skill/scripts/run.sh
+          printf 'print("hi")\n' > demo-skill/scripts/util.py
+
+      - name: Sign (keyless, RHTAS)
+        run: |
+          cat > services.json <<EOF
+          {
+            "name": "rhtas",
+            "fulcioURL": "https://fulcio-server-skill-trust-rhtas.apps.claws.bxz4.p1.openshiftapps.com",
+            "rekorURL": "https://rekor-server-skill-trust-rhtas.apps.claws.bxz4.p1.openshiftapps.com",
+            "tsaURL": "https://tsa-server-skill-trust-rhtas.apps.claws.bxz4.p1.openshiftapps.com/api/v1/timestamp",
+            "oidcIssuer": "https://token.actions.githubusercontent.com",
+            "trustedRootPath": "pkg/trust/testdata/rhtas-trusted-root.json"
+          }
+          EOF
+          /tmp/skill-trust sign demo-skill --id-token github --services services.json --json | tee sign-result.json
+          test "$(jq -r .hasTlogEntry)" = true
+          test "$(jq -r .identity)" = "$WORKFLOW_IDENTITY"
+
+      - name: Inspect
+        run: /tmp/skill-trust inspect demo-skill
+
+      - name: Verify (this workflow, RHTAS trust root, tlog required)
+        run: |
+          cat > policy.json <<EOF
+          {
+            "apiVersion": "skill-trust.policy/v1",
+            "trustRoots": {
+              "rhtas": {"type": "trusted-root", "path": "pkg/trust/testdata/rhtas-trusted-root.json"}
+            },
+            "signers": [{
+              "name": "rhtas-ci-workflow",
+              "mode": "keyless",
+              "certificate": {
+                "identityRegexp": "^https://github\\\\.com/redhat-et/skill-trust/\\\\.github/workflows/e2e-sign\\\\.yml@",
+                "issuer": "https://token.actions.githubusercontent.com"
+              },
+              "provenance": {
+                "sourceRepository": "redhat-et/skill-trust"
+              },
+              "trustRoot": "rhtas",
+              "requireTransparencyLog": true
+            }]
+          }
+          EOF
+          /tmp/skill-trust verify demo-skill --policy policy.json --json | tee verify-result.json
+          test "$(jq -r .decision)" = allow
+          test "$(jq -r '.signatures[0].matched')" = true
+
+      - name: Tamper must block
+        run: |
+          printf 'print("evil")\n' > demo-skill/scripts/util.py
+          set +e
+          /tmp/skill-trust verify demo-skill --policy policy.json --json > tamper-result.json
+          code=$?
+          set -e
+          test "$code" = 1
+          test "$(jq -r .decision)" = block
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rhtas-evidence
+          path: |
+            sign-result.json
+            verify-result.json
+            tamper-result.json
+            demo-skill/.skill-trust/
+          if-no-files-found: warn

@@ -37,8 +37,11 @@ Exactly one signing mode is selected:
   --id-token  keyless signing: Fulcio exchanges a pre-acquired OIDC
               identity token (for example a GitHub Actions token requested
               with audience "sigstore") for a short-lived certificate.
-              Requires services with a Fulcio URL, plus Rekor or a TSA so
-              the certificate can be time-validated.
+              The value is a token, "@file" containing one, or "github"
+              to fetch a fresh token from the GitHub Actions runtime
+              (requires the id-token: write permission). Requires
+              services with a Fulcio URL, plus Rekor or a TSA so the
+              certificate can be time-validated.
 
 The --services file selects the signing deployment (Fulcio, Rekor, TSA
 endpoints); see docs/TRUST-CONFIG.md. When --services is not given,
@@ -60,13 +63,22 @@ and RHTAS is a configuration change, not a code change.`,
 		}
 
 		idToken := signIDToken
-		if strings.HasPrefix(idToken, "@") {
+		switch {
+		case strings.HasPrefix(idToken, "@"):
 			b, err := os.ReadFile(strings.TrimPrefix(idToken, "@"))
 			if err != nil {
 				failf("reading identity token: %v", err)
 				return
 			}
 			idToken = strings.TrimSpace(string(b))
+		case idToken == "github":
+			// Fetch a fresh OIDC token from the GitHub Actions runtime.
+			token, err := sign.GitHubOIDCToken(cmd.Context(), sign.GitHubOIDCAudience)
+			if err != nil {
+				failf("fetching GitHub OIDC token: %v", err)
+				return
+			}
+			idToken = token
 		}
 
 		services, err := resolveServices()
@@ -151,7 +163,7 @@ func init() {
 	signCmd.Flags().StringVar(&signKey, "key", "",
 		"path to a PEM private key for key-based signing")
 	signCmd.Flags().StringVar(&signIDToken, "id-token", "",
-		"OIDC identity token for keyless signing, or @file containing it")
+		"OIDC identity token for keyless signing, @file containing it, or \"github\" to fetch one from the GitHub Actions runtime")
 	signCmd.Flags().StringVar(&signServices, "services", "",
 		"path to a signing services JSON file (default: .skill-trust-services.json if present)")
 	rootCmd.AddCommand(signCmd)
