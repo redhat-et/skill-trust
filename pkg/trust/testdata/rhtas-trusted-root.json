@@ -1,0 +1,83 @@
+{
+  "mediaType": "application/vnd.dev.sigstore.trustedroot+json;version=0.1",
+  "tlogs": [
+    {
+      "baseUrl": "https://rekor-server-skill-trust-rhtas.apps.claws.bxz4.p1.openshiftapps.com",
+      "hashAlgorithm": "SHA2_256",
+      "publicKey": {
+        "rawBytes": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEGJjIh4y5vDCZmoNkr4J4Q+iZXMGjiYNnSalpYiihmOn58Eev8psy1VVmA9bth2XQjekD9shrFFYmPdJyTyJPkQ==",
+        "keyDetails": "PKIX_ECDSA_P256_SHA_256",
+        "validFor": {
+          "start": "2026-10-28T19:47:41Z"
+        }
+      },
+      "logId": {
+        "keyId": "0gio2OqZQIowx1qUZPVVVsku0iJZSj54KFWunR6h3Fw="
+      },
+      "operator": "rhtas.redhat.com"
+    }
+  ],
+  "certificateAuthorities": [
+    {
+      "subject": {
+        "organization": "skill-trust",
+        "commonName": "fulcio-server-skill-trust-rhtas.apps.claws.bxz4.p1.openshiftapps.com"
+      },
+      "uri": "https://fulcio-server-skill-trust-rhtas.apps.claws.bxz4.p1.openshiftapps.com",
+      "certChain": {
+        "certificates": [
+          {
+            "rawBytes": "MIICSjCCAdGgAwIBAgIUbhmSp4KQBXKPKvgcGCVrKDCFcHYwCgYIKoZIzj0EAwMwZTEUMBIGA1UEChMLc2tpbGwtdHJ1c3QxTTBLBgNVBAMTRGZ1bGNpby1zZXJ2ZXItc2tpbGwtdHJ1c3Qtcmh0YXMuYXBwcy5jbGF3cy5ieHo0LnAxLm9wZW5zaGlmdGFwcHMuY29tMB4XDTI2MTAyODE5NDYxMFoXDTM2MTAyNTE5NDYxMFowZTEUMBIGA1UEChMLc2tpbGwtdHJ1c3QxTTBLBgNVBAMTRGZ1bGNpby1zZXJ2ZXItc2tpbGwtdHJ1c3Qtcmh0YXMuYXBwcy5jbGF3cy5ieHo0LnAxLm9wZW5zaGlmdGFwcHMuY29tMHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEwd/RZLgDgGKYjDbdJedc6MPsBjIh2oksJeN9YGl0WB0TlocQ3ov8GUR0VhzQM+TwEdFs41cyxHh3B95y5MLOyUPJUqh9Qi4ienItR0znpWhMFvVB5cS1D3cfBKAFaEWyo0IwQDAOBgNVHQ8BAf8EBAMCAQYwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQUXT/u4jhm93+LKzaaXc2Q8PB+9qUwCgYIKoZIzj0EAwMDZwAwZAIwNI+rstrfwWTUexY/pluk+R/R9+uA4G8nvPNuL1ACf+o7elGd3TFfVZirIO8BmsUyAjAfmYBP+3ei4Szs7olO4bvoGkDNdZvHQOUnaQFBjvbbNNlNRE601aqx/3RF+/SYrmg="
+          }
+        ]
+      },
+      "validFor": {
+        "start": "2026-10-28T19:47:41Z"
+      },
+      "operator": "rhtas.redhat.com"
+    }
+  ],
+  "ctlogs": [
+    {
+      "baseUrl": "https://ctlog.skill-trust-rhtas.svc/trusted-artifact-signer",
+      "hashAlgorithm": "SHA2_256",
+      "publicKey": {
+        "rawBytes": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE/EBR68Fn6+iQAjlI7BdpsqRf6lpgLoAFHxdY36ZqDu1oePn77gn3t4iv9qwfQg7SF3IdJaEFqjR0+xTfM3uG7w==",
+        "keyDetails": "PKIX_ECDSA_P256_SHA_256",
+        "validFor": {
+          "start": "2026-10-28T19:47:41Z"
+        }
+      },
+      "logId": {
+        "keyId": "8ximXLn3ohRNtW7e2eX4Hej+tOFwFa5PLPCJuvcz4vA="
+      },
+      "operator": "rhtas.redhat.com"
+    }
+  ],
+  "timestampAuthorities": [
+    {
+      "subject": {
+        "organization": "skill-trust",
+        "commonName": "tsa-server-skill-trust-rhtas.apps.claws.bxz4.p1.openshiftapps.com"
+      },
+      "uri": "https://tsa-server-skill-trust-rhtas.apps.claws.bxz4.p1.openshiftapps.com/api/v1/timestamp",
+      "certChain": {
+        "certificates": [
+          {
+            "rawBytes": "MIICOjCCAcGgAwIBAgIUbEjjFvoKiDNBAX3mAsTf6EUuXNgwCgYIKoZIzj0EAwMwYjEUMBIGA1UEChMLc2tpbGwtdHJ1c3QxSjBIBgNVBAMTQXRzYS1zZXJ2ZXItc2tpbGwtdHJ1c3Qtcmh0YXMuYXBwcy5jbGF3cy5ieHo0LnAxLm9wZW5zaGlmdGFwcHMuY29tMB4XDTI2MTAyODE5NDYxMFoXDTM2MTAyNTE5NDYxMFowYjEUMBIGA1UEChMLc2tpbGwtdHJ1c3QxSjBIBgNVBAMTQXRzYS1zZXJ2ZXItc2tpbGwtdHJ1c3Qtcmh0YXMuYXBwcy5jbGF3cy5ieHo0LnAxLm9wZW5zaGlmdGFwcHMuY29tMHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEL49L4ri3DadJ4MFm60m4vGjqzMY18tT7H2yxc5NbVskmNrciHIPyD/yFE7SnUhxpizL9zpVXYppkOatRYBcmYRFoFHkx8vM/j5KPjVvUebs2Tpj6kf3uO/EY1XUbwgMjozgwNjAOBgNVHQ8BAf8EBAMCAQYwDAYDVR0TAQH/BAIwADAWBgNVHSUBAf8EDDAKBggrBgEFBQcDCDAKBggqhkjOPQQDAwNnADBkAjAtq9xp/mwuA6GGJlLtPBlsE+fjlLyuadOtM7XiYF5tp26OVqQ4n11Ue5cVrHnuf6YCMFx4mMt1CUJk8Sip+6+yJquYO91EPtowysd1dhQrZxnvDQ1hfZHrp3ro4KRotQE26A=="
+          },
+          {
+            "rawBytes": "MIICXTCCAeOgAwIBAgIUFRCYOcujxo0bz98sJ9h/EsmwAtkwCgYIKoZIzj0EAwMwYjEUMBIGA1UEChMLc2tpbGwtdHJ1c3QxSjBIBgNVBAMTQXRzYS1zZXJ2ZXItc2tpbGwtdHJ1c3Qtcmh0YXMuYXBwcy5jbGF3cy5ieHo0LnAxLm9wZW5zaGlmdGFwcHMuY29tMB4XDTI2MTAyODE5NDYxMFoXDTM2MTAyNTE5NDYxMFowYjEUMBIGA1UEChMLc2tpbGwtdHJ1c3QxSjBIBgNVBAMTQXRzYS1zZXJ2ZXItc2tpbGwtdHJ1c3Qtcmh0YXMuYXBwcy5jbGF3cy5ieHo0LnAxLm9wZW5zaGlmdGFwcHMuY29tMHYwEAYHKoZIzj0CAQYFK4EEACIDYgAE5/JbOb4HjSIDxLHP3wYyQHwKPXOIq52ige3tLtLtjg5hW1Tg+w7tZbmOa067Lx61fYVuTmWTZ5kCq4lk/vwrJEFcbzarqnis5Uo9MqW3/OmOHCirfjSuT9aVOqBacYGPo1owWDAOBgNVHQ8BAf8EBAMCAQYwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQU9jBaHJEMi0jt4Gr3pD/ioqvj25gwFgYDVR0lAQH/BAwwCgYIKwYBBQUHAwgwCgYIKoZIzj0EAwMDaAAwZQIwUr/+ZEVOVsXw5JHnBIqDvrkghpw0w9hIHcYlRdl6hOLuCsnBDw34MEw/75V6hV75AjEAqvuE3CA4SHgb0qXr2gNciroYq6OnHEp5dptktpUaydjpORMpT3byZDf5AK2s7t2P"
+          },
+          {
+            "rawBytes": "MIICRDCCAcugAwIBAgIUZtcnhoAxPhHKvVMwqxN2SOqSe9cwCgYIKoZIzj0EAwMwYjEUMBIGA1UEChMLc2tpbGwtdHJ1c3QxSjBIBgNVBAMTQXRzYS1zZXJ2ZXItc2tpbGwtdHJ1c3Qtcmh0YXMuYXBwcy5jbGF3cy5ieHo0LnAxLm9wZW5zaGlmdGFwcHMuY29tMB4XDTI2MTAyODE5NDYxMFoXDTM2MTAyNTE5NDYxMFowYjEUMBIGA1UEChMLc2tpbGwtdHJ1c3QxSjBIBgNVBAMTQXRzYS1zZXJ2ZXItc2tpbGwtdHJ1c3Qtcmh0YXMuYXBwcy5jbGF3cy5ieHo0LnAxLm9wZW5zaGlmdGFwcHMuY29tMHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEG1zoC5IGzhzBtAFYxa5HFBg9errHZi29J0SrX7dvkcMmdBTacZFodJXBBnHju4JHPbJ8JkOV2sNaQwdD8xwdY8KV18l3aRg/EiGXQXnrN4ODrpYSmgFHTGA3QJvxzxgyo0IwQDAOBgNVHQ8BAf8EBAMCAQYwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQUVvOfon9YQixYv2IpZFxNMjvDrJswCgYIKoZIzj0EAwMDZwAwZAIwSh5y3cmeW9NJXH5qI15DpPJjL3+ZHQ52AwgC5fVeSCR93OOuHEDoqmH+nleLMSOxAjBq4/EqFRB7oMlmp2MMzWiYGl8XSO1y5S6D9qo+0IttGB4J/k0ua9pbAVsRiAg424c="
+          }
+        ]
+      },
+      "validFor": {
+        "start": "2026-10-28T19:47:41Z"
+      },
+      "operator": "rhtas.redhat.com"
+    }
+  ]
+}
