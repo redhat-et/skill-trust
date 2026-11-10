@@ -1,0 +1,14 @@
+{
+  "apiVersion": "skill-trust.policy/v1",
+  "name": "offline-key",
+  "description": "Fully offline verification: a pinned public key, no transparency log or timestamp services, no network access of any kind at verify time. Key-based signing is the air-gapped anchor. (Keyless bundles with transparency log entries are also offline-verifiable - the inclusion proof ships inside the bundle - but require updating trust roots on rotation.)",
+  "trustRoots": {},
+  "signers": [
+    {
+      "name": "release-key",
+      "mode": "key",
+      "publicKey": {"path": "testdata/fixtures/fixtures.pub"},
+      "requireTransparencyLog": false
+    }
+  ]
+}

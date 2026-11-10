@@ -1,0 +1,21 @@
+{
+  "apiVersion": "skill-trust.policy/v1",
+  "name": "github-repository",
+  "description": "Trust any workflow of one repository, signed keyless through the organization's RHTAS instance. The identityRegexp accepts every workflow file of redhat-et/skill-trust on refs/heads/main; the issuer, provenance, trust root, and transparency log entry are still pinned. Widening the signer set is a deliberate choice - see docs/LIFECYCLE.md for the trade-offs.",
+  "trustRoots": {
+    "rhtas": {"type": "trusted-root", "path": "testdata/fixtures/rhtas-trusted-root.json"}
+  },
+  "signers": [
+    {
+      "name": "repo-workflows",
+      "mode": "keyless",
+      "certificate": {
+        "identityRegexp": "^https://github\\.com/redhat-et/skill-trust/\\.github/workflows/.+\\.yml@refs/heads/main$",
+        "issuer": "https://token.actions.githubusercontent.com"
+      },
+      "provenance": {"sourceRepository": "redhat-et/skill-trust"},
+      "trustRoot": "rhtas",
+      "requireTransparencyLog": true
+    }
+  ]
+}

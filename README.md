@@ -119,7 +119,8 @@ shipped; KMS or hardware-backed keys interoperate through cosign-produced
 bundles. Organization policy can require specific signer identities, OIDC
 issuers, source/provenance claims, evidence (transparency log entries,
 RFC 3161 timestamps), freshness limits, and trust roots
-([policy reference](docs/POLICY.md)).
+([policy reference](docs/POLICY.md); worked examples with machine-checked
+fixtures in [`examples/policy/`](examples/policy/)).
 
 Verification is offline-capable when the distributed bundle and trusted-root
 material are available locally.

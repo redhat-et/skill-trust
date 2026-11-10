@@ -1,0 +1,27 @@
+{
+  "apiVersion": "skill-trust.policy/v1",
+  "name": "mixed-trust",
+  "description": "Combine anchors: a long-lived release key AND the RHTAS keyless release workflow, either of which may sign. Useful during signer rotation (see docs/LIFECYCLE.md): old key-signed and new keyless packages verify simultaneously while the transition completes, then the retiring rule is removed. Unsigned and unknown skills fail closed under every policy.",
+  "trustRoots": {
+    "rhtas": {"type": "trusted-root", "path": "testdata/fixtures/rhtas-trusted-root.json"}
+  },
+  "signers": [
+    {
+      "name": "release-key",
+      "mode": "key",
+      "publicKey": {"path": "testdata/fixtures/fixtures.pub"},
+      "requireTransparencyLog": false
+    },
+    {
+      "name": "release-workflow",
+      "mode": "keyless",
+      "certificate": {
+        "identityRegexp": "^https://github\\.com/redhat-et/skill-trust/\\.github/workflows/.+\\.yml@refs/heads/main$",
+        "issuer": "https://token.actions.githubusercontent.com"
+      },
+      "provenance": {"sourceRepository": "redhat-et/skill-trust"},
+      "trustRoot": "rhtas",
+      "requireTransparencyLog": true
+    }
+  ]
+}

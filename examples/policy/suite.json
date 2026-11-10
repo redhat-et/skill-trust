@@ -1,0 +1,76 @@
+{
+  "apiVersion": "skill-trust.fixtures/v1",
+  "name": "example-policies",
+  "description": "Expected results for the example organization policies. Every example has at least one passing and one failing fixture, machine-checked in CI. Fixtures live under testdata/fixtures; policies reference trust material by repository-root-relative paths, so the CLI form is: skill-trust verify testdata/fixtures/<fixture> --policy examples/policy/<policy>.json (from the repository root).",
+  "cases": [
+    {
+      "name": "rhtas-signer-accepts-its-workflow",
+      "policy": "rhtas-signer.json",
+      "fixture": "testdata/fixtures/cross-root-rhtas",
+      "expect": {"decision": "allow", "matchedSigner": "release-workflow"}
+    },
+    {
+      "name": "rhtas-signer-rejects-key-signed-skill",
+      "policy": "rhtas-signer.json",
+      "fixture": "testdata/fixtures/valid-complete",
+      "expect": {"decision": "block", "code": "ST-POLICY-NO-MATCH"}
+    },
+    {
+      "name": "github-repository-accepts-any-repo-workflow-on-main",
+      "policy": "github-repository.json",
+      "fixture": "testdata/fixtures/cross-root-rhtas",
+      "expect": {"decision": "allow", "matchedSigner": "repo-workflows"}
+    },
+    {
+      "name": "github-repository-rejects-key-signed-skill",
+      "policy": "github-repository.json",
+      "fixture": "testdata/fixtures/valid-complete",
+      "expect": {"decision": "block", "code": "ST-POLICY-NO-MATCH"}
+    },
+    {
+      "name": "github-repository-rejects-tampered-content",
+      "policy": "github-repository.json",
+      "fixture": "testdata/fixtures/cross-root-rhtas",
+      "mutation": {"op": "write", "path": "scripts/util.py", "content": "print(\"tampered\")\n"},
+      "expect": {"decision": "block", "code": "ST-CONTENT-MISMATCH"}
+    },
+    {
+      "name": "github-repository-rejects-unsigned-skill",
+      "policy": "github-repository.json",
+      "fixture": "testdata/fixtures/valid-complete",
+      "mutation": {"op": "remove-all", "path": ".skill-trust"},
+      "expect": {"decision": "block", "code": "ST-METADATA-MISSING"}
+    },
+    {
+      "name": "offline-key-accepts-key-signed-skill",
+      "policy": "offline-key.json",
+      "fixture": "testdata/fixtures/valid-complete",
+      "expect": {"decision": "allow", "matchedSigner": "release-key"}
+    },
+    {
+      "name": "offline-key-rejects-keyless-bundle",
+      "policy": "offline-key.json",
+      "fixture": "testdata/fixtures/cross-root-rhtas",
+      "expect": {"decision": "block", "code": "ST-POLICY-NO-MATCH"}
+    },
+    {
+      "name": "mixed-trust-accepts-key-signed-skill",
+      "policy": "mixed-trust.json",
+      "fixture": "testdata/fixtures/valid-complete",
+      "expect": {"decision": "allow", "matchedSigner": "release-key"}
+    },
+    {
+      "name": "mixed-trust-accepts-keyless-skill",
+      "policy": "mixed-trust.json",
+      "fixture": "testdata/fixtures/cross-root-rhtas",
+      "expect": {"decision": "allow", "matchedSigner": "release-workflow"}
+    },
+    {
+      "name": "mixed-trust-rejects-unsigned-skill",
+      "policy": "mixed-trust.json",
+      "fixture": "testdata/fixtures/valid-complete",
+      "mutation": {"op": "remove-all", "path": ".skill-trust"},
+      "expect": {"decision": "block", "code": "ST-METADATA-MISSING"}
+    }
+  ]
+}

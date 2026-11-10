@@ -169,6 +169,23 @@ func applyMutation(t *testing.T, dir string, m *fixtureMutation) {
 // working directory (the committed files stay usable from the CLI, where
 // they resolve relative to the fixtures directory).
 func loadFixturePolicy(path string) (*Policy, error) {
+	return loadPolicyRelocated(path, filepath.Dir(path))
+}
+
+// loadExamplePolicy loads an example policy from examples/policy, whose
+// relative trust-material paths are repository-root relative (so the CLI
+// form `skill-trust verify testdata/... --policy examples/policy/...`
+// works from the repository root).
+func loadExamplePolicy(path string) (*Policy, error) {
+	return loadPolicyRelocated(path, repoRoot)
+}
+
+// repoRoot is the repository root, two levels above this package.
+var repoRoot = filepath.Join("..", "..")
+
+// loadPolicyRelocated loads a policy, resolving relative key and
+// trust-root paths against base.
+func loadPolicyRelocated(path, base string) (*Policy, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -177,7 +194,6 @@ func loadFixturePolicy(path string) (*Policy, error) {
 	if err := json.Unmarshal(raw, &doc); err != nil {
 		return nil, err
 	}
-	base := filepath.Dir(path)
 	for _, s := range doc["signers"].([]any) {
 		rule := s.(map[string]any)
 		if pk, ok := rule["publicKey"].(map[string]any); ok {
@@ -398,4 +414,110 @@ func hasFindingCode(r Result, code string) bool {
 		}
 	}
 	return false
+}
+
+// The example-policy suite: every policy in examples/policy is checked
+// against committed fixtures with expected passing and failing results
+// (examples/policy/suite.json), so the documented examples cannot drift
+// from reality.
+type examplePolicyCase struct {
+	Name     string           `json:"name"`
+	Policy   string           `json:"policy"`
+	Fixture  string           `json:"fixture"`
+	Mutation *fixtureMutation `json:"mutation"`
+	Expect   fixtureExpect    `json:"expect"`
+}
+
+type examplePolicySuite struct {
+	Cases []examplePolicyCase `json:"cases"`
+}
+
+func TestExamplePolicySuite(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(repoRoot, "examples", "policy", "suite.json"))
+	if err != nil {
+		t.Fatalf("reading suite.json: %v", err)
+	}
+	var suite examplePolicySuite
+	if err := json.Unmarshal(raw, &suite); err != nil {
+		t.Fatalf("parsing suite.json: %v", err)
+	}
+	if len(suite.Cases) == 0 {
+		t.Fatal("suite.json has no cases")
+	}
+
+	// Every example policy must appear in at least one passing and one
+	// failing case.
+	passing := map[string]bool{}
+	failing := map[string]bool{}
+	for _, tc := range suite.Cases {
+		if tc.Expect.Decision == "allow" {
+			passing[tc.Policy] = true
+		} else {
+			failing[tc.Policy] = true
+		}
+	}
+	for _, name := range policyFiles(t) {
+		if !passing[name] || !failing[name] {
+			t.Errorf("example policy %s lacks a passing or failing fixture case (passing=%t failing=%t)", name, passing[name], failing[name])
+		}
+	}
+
+	for _, tc := range suite.Cases {
+		t.Run(tc.Name, func(t *testing.T) {
+			policy, err := loadExamplePolicy(filepath.Join(repoRoot, "examples", "policy", filepath.FromSlash(tc.Policy)))
+			if err != nil {
+				t.Fatalf("loading policy: %v", err)
+			}
+			verifier, err := New(policy)
+			if err != nil {
+				t.Fatalf("New verifier: %v", err)
+			}
+
+			dir := copyFixture(t, filepath.Join(repoRoot, filepath.FromSlash(tc.Fixture)))
+			applyMutation(t, dir, tc.Mutation)
+
+			result, err := verifier.VerifySkill(dir)
+			if err != nil {
+				t.Fatalf("VerifySkill: %v", err)
+			}
+
+			if string(result.Decision) != tc.Expect.Decision {
+				t.Errorf("decision = %s, want %s (findings: %s)", result.Decision, tc.Expect.Decision, findingSummary(result))
+			}
+			switch tc.Expect.Decision {
+			case "allow":
+				// Multi-rule policies report every rule; one full match
+				// allows, so assert that at least one rule matched.
+				anyMatched := false
+				for _, s := range result.Signatures {
+					if s.Matched {
+						anyMatched = true
+					}
+				}
+				if !anyMatched {
+					t.Errorf("expected a matching signature, got %+v", result.Signatures)
+				}
+			case "block":
+				if !hasFindingCode(result, tc.Expect.Code) {
+					t.Errorf("no finding with code %s (findings: %s)", tc.Expect.Code, findingSummary(result))
+				}
+			}
+		})
+	}
+}
+
+// policyFiles lists the example policy JSON files (suite.json excluded).
+func policyFiles(t *testing.T) []string {
+	t.Helper()
+	entries, err := os.ReadDir(filepath.Join(repoRoot, "examples", "policy"))
+	if err != nil {
+		t.Fatalf("listing examples/policy: %v", err)
+	}
+	var out []string
+	for _, e := range entries {
+		if !e.IsDir() && filepath.Ext(e.Name()) == ".json" && e.Name() != "suite.json" {
+			out = append(out, e.Name())
+		}
+	}
+	return out
 }

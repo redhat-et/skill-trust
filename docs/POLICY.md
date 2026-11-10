@@ -16,6 +16,12 @@ Each stage fails independently and fail-closed. A policy never changes how a
 manifest is computed and never relaxes cryptographic checks; it only decides
 which valid signatures are acceptable.
 
+Complete worked policies for common enterprise cases — a pinned RHTAS
+signer, a repository-wide workflow identity, fully offline key-based
+verification, and a rotation-time combination — live in
+[`examples/policy/`](../examples/policy/), each with machine-checked
+passing and failing fixtures.
+
 ## Policy file
 
 A policy is a JSON document:
