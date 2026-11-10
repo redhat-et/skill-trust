@@ -156,12 +156,14 @@ and RHTAS-keyless signatures.
 request and push against the repository's own signed skills under
 [`skills/`](skills/); the [`e2e-sign`](.github/workflows/e2e-sign.yml)
 workflow exercises it against keyless signatures on public Sigstore and
-RHTAS. Remaining planned work:
+RHTAS.
 
-- sign approved skills in trusted release/tag workflows using GitHub OIDC;
-- publish the skill package, manifest, bundle, and report as release assets; and
-- support switching between public Sigstore and an organization's RHTAS
-  endpoints without changing the skill package format.
+Approved skills are signed and published by the
+[`release-sign`](.github/workflows/release-sign.yml) workflow: keyless with
+GitHub OIDC, only from `v*` tags through the protected `release`
+environment, targeting public Sigstore or RHTAS. Each release ships the
+skill package, manifest, bundle, verification report, and the consumer
+policy. See [docs/RELEASE.md](docs/RELEASE.md).
 
 ### The repository's own skills
 

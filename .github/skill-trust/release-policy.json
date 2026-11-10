@@ -1,0 +1,23 @@
+{
+  "apiVersion": "skill-trust.policy/v1",
+  "name": "skill-trust-release",
+  "trustRoots": {
+    "sigstore": {"type": "sigstore-public"}
+  },
+  "signers": [
+    {
+      "name": "release-workflow",
+      "mode": "keyless",
+      "certificate": {
+        "identityRegexp": "^https://github\\.com/redhat-et/skill-trust/\\.github/workflows/release-sign\\.yml@refs/tags/v",
+        "issuer": "https://token.actions.githubusercontent.com"
+      },
+      "provenance": {
+        "sourceRepository": "redhat-et/skill-trust",
+        "workflowName": "release-sign"
+      },
+      "trustRoot": "sigstore",
+      "requireTransparencyLog": true
+    }
+  ]
+}

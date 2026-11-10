@@ -1,0 +1,235 @@
+name: release-sign
+
+# Trusted release signing for the repository's skills.
+#
+# Trust model (see docs/RELEASE.md):
+# - Trigger: pushes of tags matching v*. Pushes of branches never sign.
+# - workflow_dispatch (main only) is a dry run: it signs and verifies but
+#   does not publish a GitHub release, and its signatures deliberately do
+#   not satisfy the consumer policy (which trusts tag refs only).
+# - The job runs in the "release" environment so maintainers can add
+#   required reviewers and restrict it to tags in repository settings.
+# - Identity constraints: the signer must be this workflow file, issued by
+#   GitHub Actions OIDC (https://token.actions.githubusercontent.com), with
+#   a transparency log entry. The consumer policy pins all of this.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Signing deployment to use
+        type: choice
+        options: [public, rhtas]
+        default: public
+
+permissions:
+  contents: write
+  id-token: write
+
+env:
+  # Tag pushes use the repository variable (default public); dispatch runs
+  # choose explicitly.
+  TARGET: ${{ github.event_name == 'workflow_dispatch' && inputs.target || vars.SKILL_TRUST_SIGNING_TARGET || 'public' }}
+
+jobs:
+  sign:
+    name: Sign and release skills
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Guard trusted refs
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && ! [[ "$GITHUB_REF" =~ ^refs/tags/v ]]; then
+            echo "::error::refusing to sign from untrusted ref $GITHUB_REF (only tags v* sign releases)"
+            exit 1
+          fi
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::workflow_dispatch signing is a dry run and is only allowed from main (got $GITHUB_REF)"
+            exit 1
+          fi
+          echo "signing $GITHUB_REF against $TARGET"
+
+      - name: Build
+        run: go build -o /tmp/skill-trust ./cmd/skill-trust
+
+      - name: Stage skills
+        run: |
+          set -euo pipefail
+          mkdir -p release dist
+          for skill in skills/*/; do
+            [ -f "$skill/SKILL.md" ] || continue
+            name="$(basename "$skill")"
+            cp -R "$skill" "release/$name"
+            # Fresh signing: drop the CI tamper-seal control files. The
+            # signed content is identical (the control directory is not
+            # part of the manifest).
+            rm -rf "release/$name/.skill-trust"
+            echo "staged $name"
+          done
+          compgen -G "release/*/SKILL.md" > /dev/null || { echo "::error::no skills found under skills/"; exit 1; }
+
+      - name: Services config
+        run: |
+          set -euo pipefail
+          if [ "$TARGET" = rhtas ]; then
+            cat > services.json <<EOF
+          {
+            "name": "rhtas",
+            "fulcioURL": "https://fulcio-server-skill-trust-rhtas.apps.claws.bxz4.p1.openshiftapps.com",
+            "rekorURL": "https://rekor-server-skill-trust-rhtas.apps.claws.bxz4.p1.openshiftapps.com",
+            "tsaURL": "https://tsa-server-skill-trust-rhtas.apps.claws.bxz4.p1.openshiftapps.com/api/v1/timestamp",
+            "oidcIssuer": "https://token.actions.githubusercontent.com",
+            "trustedRootPath": "pkg/trust/testdata/rhtas-trusted-root.json"
+          }
+          EOF
+          else
+            cat > services.json <<EOF
+          {
+            "name": "sigstore-public",
+            "fulcioURL": "https://fulcio.sigstore.dev",
+            "rekorURL": "https://rekor.sigstore.dev",
+            "tsaURL": "https://timestamp.sigstore.dev/api/v1/timestamp",
+            "oidcIssuer": "https://oauth2.sigstore.dev/auth"
+          }
+          EOF
+          fi
+
+      - name: Sign (keyless, GitHub OIDC)
+        run: |
+          set -euo pipefail
+          identity="https://github.com/redhat-et/skill-trust/.github/workflows/release-sign.yml@$GITHUB_REF"
+          echo "signer identity: $identity"
+          for skill in release/*/; do
+            name="$(basename "$skill")"
+            /tmp/skill-trust sign "release/$name" --id-token github --services services.json --json | tee "dist/$name.sign-result.json"
+            test "$(jq -r .hasTlogEntry "dist/$name.sign-result.json")" = true
+            test "$(jq -r .identity "dist/$name.sign-result.json")" = "$identity"
+            test "$(jq -r .issuer "dist/$name.sign-result.json")" = "https://token.actions.githubusercontent.com"
+          done
+
+      - name: Verify and package
+        run: |
+          set -euo pipefail
+          identity="https://github.com/redhat-et/skill-trust/.github/workflows/release-sign.yml@$GITHUB_REF"
+          if [ "$TARGET" = rhtas ]; then
+            trust='{"tr":{"type":"trusted-root","path":"pkg/trust/testdata/rhtas-trusted-root.json"}}'
+          else
+            trust='{"tr":{"type":"sigstore-public"}}'
+          fi
+
+          # Runtime policy: the exact signer identity of this run, the
+          # target trust root, issuer, provenance, and a required
+          # transparency log entry.
+          jq -n --argjson trust "$trust" --arg id "$identity" '{
+            apiVersion: "skill-trust.policy/v1",
+            name: "skill-trust-release-runtime",
+            trustRoots: $trust,
+            signers: [{
+              name: "release-workflow",
+              mode: "keyless",
+              certificate: {identities: [$id], issuer: "https://token.actions.githubusercontent.com"},
+              provenance: {sourceRepository: "redhat-et/skill-trust", workflowName: "release-sign"},
+              trustRoot: "tr",
+              requireTransparencyLog: true
+            }]
+          }' > verify-policy.json
+
+          # Consumer policy shipped with the release: same constraints but
+          # the identity is restricted to tag refs of this workflow, so
+          # dry-run (branch) signatures never satisfy it. For the public
+          # target this is the committed policy, proven as-is.
+          if [ "$TARGET" = rhtas ]; then
+            jq -n --argjson trust "$trust" '{
+              apiVersion: "skill-trust.policy/v1",
+              name: "skill-trust-release",
+              trustRoots: $trust,
+              signers: [{
+                name: "release-workflow",
+                mode: "keyless",
+                certificate: {
+                  identityRegexp: "^https://github\\.com/redhat-et/skill-trust/\\.github/workflows/release-sign\\.yml@refs/tags/v",
+                  issuer: "https://token.actions.githubusercontent.com"
+                },
+                provenance: {sourceRepository: "redhat-et/skill-trust", workflowName: "release-sign"},
+                trustRoot: "tr",
+                requireTransparencyLog: true
+              }]
+            }' > dist/release-policy.json
+          else
+            cp .github/skill-trust/release-policy.json dist/release-policy.json
+          fi
+
+          for skill in release/*/; do
+            name="$(basename "$skill")"
+
+            # Exact-identity verification with tlog required.
+            /tmp/skill-trust verify "release/$name" --policy verify-policy.json --json | tee "dist/$name.report.json"
+            test "$(jq -r .decision "dist/$name.report.json")" = allow
+
+            # On tag pushes also prove the consumer policy accepts the
+            # signature. Dry runs (branch identity) are rejected by it on
+            # purpose.
+            if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+              /tmp/skill-trust verify "release/$name" --policy dist/release-policy.json --json > /dev/null
+            fi
+
+            # Control files and the informational report as assets; the
+            # report also ships inside the archive.
+            cp "release/$name/.skill-trust/manifest.json" "dist/$name.manifest.json"
+            cp "release/$name/.skill-trust/bundle.sigstore.json" "dist/$name.bundle.sigstore.json"
+            cp "dist/$name.report.json" "release/$name/.skill-trust/report.json"
+            tar -czf "dist/$name.tar.gz" -C release "$name"
+          done
+
+          {
+            echo "## skill-trust release signing"
+            echo
+            echo "Target: \`$TARGET\` — skills signed keyless by \`release-sign.yml\` at \`$GITHUB_REF\`."
+            echo
+            echo "| Asset | Meaning |"
+            echo "|-------|---------|"
+            echo "| \`<skill>.tar.gz\` | Skill package (content + \`.skill-trust/\` control files) |"
+            echo "| \`<skill>.manifest.json\` | Canonical manifest (SHA-256 of it is the signed subject) |"
+            echo "| \`<skill>.bundle.sigstore.json\` | Sigstore bundle with the keyless signature |"
+            echo "| \`<skill>.report.json\` | Verification report from this workflow |"
+            echo "| \`release-policy.json\` | Policy consumers verify the assets with |"
+            echo
+            echo "Verify a downloaded archive:"
+            echo
+            echo '```console'
+            echo "tar -xzf demo-skill.tar.gz"
+            echo "skill-trust verify demo-skill --policy release-policy.json"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload signing evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-signing-${{ env.TARGET }}
+          include-hidden-files: true
+          path: dist/
+          if-no-files-found: warn
+
+      - name: Publish GitHub release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          assets=(dist/*.tar.gz dist/*.manifest.json dist/*.bundle.sigstore.json dist/*.report.json dist/release-policy.json)
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" "${assets[@]}" --clobber
+          else
+            gh release create "$TAG" "${assets[@]}" --title "$TAG" --generate-notes
+          fi

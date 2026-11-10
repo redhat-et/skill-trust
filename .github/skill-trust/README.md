@@ -6,6 +6,10 @@ pull-request verification workflow (`.github/workflows/verify-pr.yml`).
 - `demo-signing.key` / `demo-signing.pub` — a P-256 key pair that seals the
   committed skill fixtures under `skills/`.
 - `pr-policy.json` — the policy the PR workflow verifies against.
+- `release-policy.json` — the consumer policy for released skill assets:
+  keyless signatures produced by the `release-sign` workflow on tags `v*`,
+  on public Sigstore, with a transparency log entry required. The same file
+  is shipped with each release. See [docs/RELEASE.md](../../docs/RELEASE.md).
 
 **The private key is committed on purpose.** It is a tamper seal for CI, not
 a trust root: anyone with repository write access could re-sign content, so
