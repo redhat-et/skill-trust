@@ -231,3 +231,152 @@ jobs:
             tamper-result.json
             demo-skill/.skill-trust/
           if-no-files-found: warn
+
+  opencode-adapter:
+    name: opencode adapter e2e (public Sigstore)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build
+        run: go build -o /tmp/skill-trust ./cmd/skill-trust
+
+      - name: Install adapter dependencies
+        run: npm ci
+        working-directory: adapters/opencode
+
+      - name: Install OpenCode
+        run: npm install -g opencode-ai@2.0.32
+
+      - name: Fixture
+        run: |
+          mkdir -p demo-skill/scripts
+          printf -- '---\nname: e2e-demo\n---\nSigned in CI for the adapter e2e.\n' > demo-skill/SKILL.md
+          printf '#!/usr/bin/env bash\necho hello\n' > demo-skill/scripts/run.sh
+          chmod +x demo-skill/scripts/run.sh
+          printf 'print("hi")\n' > demo-skill/scripts/util.py
+
+      - name: Sign (keyless, public Sigstore)
+        run: |
+          cat > services.json <<EOF
+          {
+            "name": "sigstore-public",
+            "fulcioURL": "https://fulcio.sigstore.dev",
+            "rekorURL": "https://rekor.sigstore.dev",
+            "tsaURL": "https://timestamp.sigstore.dev/api/v1/timestamp",
+            "oidcIssuer": "https://oauth2.sigstore.dev/auth"
+          }
+          EOF
+          /tmp/skill-trust sign demo-skill --id-token github --services services.json --json | tee sign-result.json
+          test "$(jq -r .hasTlogEntry sign-result.json)" = true
+          test "$(jq -r .identity sign-result.json)" = "$WORKFLOW_IDENTITY"
+          test "$(jq -r .issuer sign-result.json)" = "https://token.actions.githubusercontent.com"
+
+      - name: Wire scratch project
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/oc/.opencode/skill
+          # the verified skill, and a tampered copy of it
+          cp -R demo-skill /tmp/oc/.opencode/skill/demo
+          cp -R demo-skill /tmp/oc/.opencode/skill/evil
+          printf 'print("EVIL PAYLOAD")\n' > /tmp/oc/.opencode/skill/evil/scripts/util.py
+          cd /tmp/oc
+          git init -q
+          git config user.email ci@localhost
+          git config user.name ci
+          git add -A
+          git commit -qm init
+          cat > policy.json <<EOF
+          {
+            "apiVersion": "skill-trust.policy/v1",
+            "trustRoots": {"sigstore": {"type": "sigstore-public"}},
+            "signers": [{
+              "name": "ci-workflow",
+              "mode": "keyless",
+              "certificate": {
+                "identities": ["$WORKFLOW_IDENTITY"],
+                "issuer": "https://token.actions.githubusercontent.com"
+              },
+              "trustRoot": "sigstore",
+              "requireTransparencyLog": true
+            }]
+          }
+          EOF
+          cat > .opencode/opencode.json <<EOF
+          {
+            "plugins": [
+              {
+                "package": "$GITHUB_WORKSPACE/adapters/opencode",
+                "options": {
+                  "policy": "/tmp/oc/policy.json",
+                  "binary": "/tmp/skill-trust",
+                  "intervalMs": 3000
+                }
+              }
+            ]
+          }
+          EOF
+
+      - name: Start OpenCode server
+        working-directory: /tmp/oc
+        run: |
+          set -euo pipefail
+          nohup opencode serve --port 4599 > server.log 2>&1 &
+          for _ in $(seq 1 60); do
+            grep -q "server password" server.log && break
+            sleep 1
+          done
+          grep -o "server password .*" server.log | awk '{print $3}' > password.txt
+          test -s password.txt
+
+      - name: Load gate keeps only the verified skill
+        working-directory: /tmp/oc
+        run: |
+          set -euo pipefail
+          PASS="$(cat password.txt)"
+          ids=""
+          for _ in $(seq 1 90); do
+            ids="$(curl -s --max-time 20 -u "opencode:$PASS" http://localhost:4599/api/skill | jq -r '.data[].id' | sort | tr '\n' ',')"
+            if [ "$ids" = "demo," ]; then
+              echo "load gate settled: only 'demo' is registered"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::load gate did not settle; last ids: $ids"
+          grep "skill-trust" server.log | tail -20 || true
+          exit 1
+
+      - name: Execution guard blocks the modified helper
+        working-directory: /tmp/oc
+        run: |
+          set -euo pipefail
+          PASS="$(cat password.txt)"
+          SESSION="$(curl -s --max-time 20 -u "opencode:$PASS" -X POST http://localhost:4599/api/session -H "Content-Type: application/json" -d '{}' | jq -r .data.id)"
+          code="$(curl -s --max-time 60 -o /dev/null -u "opencode:$PASS" -X POST http://localhost:4599/api/session/$SESSION/shell -H "Content-Type: application/json" -d '{"command": "python3 /tmp/oc/.opencode/skill/evil/scripts/util.py"}' -w "%{http_code}")"
+          echo "tampered helper HTTP $code (expected 500)"
+          test "$code" = "500"
+          grep "guard blocked" server.log | tail -2
+
+      - name: Stop server
+        if: always()
+        run: pkill -f "opencode serve" || true
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-adapter-evidence
+          include-hidden-files: true
+          path: |
+            sign-result.json
+            demo-skill/.skill-trust/
+          if-no-files-found: warn
