@@ -108,7 +108,8 @@ content identity before skill-associated execution. A modified Bash or Python
 script must be blocked before it runs.
 
 See the [architecture and enforcement design](docs/ARCHITECTURE.md) for the
-trust boundary and adapter contract.
+trust boundary and adapter contract, and the [threat model](docs/THREAT-MODEL.md)
+for what a signature does and does not prove.
 
 ## GitHub Actions
 
