@@ -38,9 +38,10 @@ and [custom component configuration](https://docs.sigstore.dev/cosign/system_con
 
 ## Project status
 
-This repository is currently in the design and backlog-building phase. The
-format, CLI, Go library, GitHub Actions, and OpenCode adapter described here
-are planned interfaces, not shipped functionality yet.
+The design is complete and the implementation is in progress. The canonical
+manifest (spec and Go package with cross-platform test vectors) is shipped;
+signing, verification, the CLI, and harness adapters follow the
+[backlog order](docs/PROJECT-ISSUES.md).
 
 ## Skill format and signed boundary
 
@@ -71,7 +72,8 @@ special filesystem entries are rejected in the first version.
 The canonical manifest includes normalized relative paths, entry types, file
 content digests, executable permission bits, the manifest format version, and
 the hash algorithm. Host-specific timestamps, owners, absolute paths, and
-other unstable filesystem metadata are not signed.
+other unstable filesystem metadata are not signed. The full specification
+with test vectors is in [docs/MANIFEST.md](docs/MANIFEST.md).
 
 ## Planned command-line interface
 

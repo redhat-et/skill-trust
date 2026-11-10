@@ -1,0 +1,12 @@
+# local agent helper scripts
+.local/
+
+# macOS metadata
+.DS_Store
+
+# built binaries
+/skill-trust
+dist/
+
+# go test artifacts
+*.test
