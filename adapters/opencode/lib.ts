@@ -8,6 +8,7 @@
 // decides when a guarded path must be blocked (fail closed).
 
 import { spawn } from "node:child_process"
+import { realpathSync } from "node:fs"
 import * as path from "node:path"
 
 /** One machine-readable verification finding. */
@@ -109,9 +110,39 @@ export function runVerify(
   })
 }
 
-/** skillRootFromPath maps a SKILL.md path to its skill root directory. */
+/**
+ * normalizePath canonicalizes a path so containment checks cannot be
+ * bypassed through symlinked ancestors (for example /tmp vs /private/tmp on
+ * macOS, or /bin vs /usr/bin on merged-usr Linux). Symlinks inside a skill
+ * directory are already rejected by the manifest format; this closes the
+ * aliasing of the *prefix*.
+ *
+ * The path is resolved to its real path when it exists. When it does not
+ * (a command may reference a file that is not on disk), the deepest
+ * existing ancestor is resolved and the remaining components appended, so
+ * an alias is still collapsed for the part of the path that exists.
+ */
+export function normalizePath(p: string): string {
+  const abs = path.isAbsolute(p) ? p : path.resolve(p)
+  try {
+    return realpathSync(abs)
+  } catch {
+    const parts = abs.split(path.sep)
+    for (let i = parts.length; i > 1; i--) {
+      const prefix = parts.slice(0, i).join(path.sep) || path.sep
+      try {
+        return path.join(realpathSync(prefix), ...parts.slice(i))
+      } catch {
+        // try a shorter ancestor
+      }
+    }
+    return abs
+  }
+}
+
+/** skillRootFromPath maps a SKILL.md path to its canonical skill root. */
 export function skillRootFromPath(skillPath: string): string {
-  return path.dirname(skillPath)
+  return normalizePath(path.dirname(skillPath))
 }
 
 /**

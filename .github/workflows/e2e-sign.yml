@@ -254,7 +254,13 @@ jobs:
         working-directory: adapters/opencode
 
       - name: Install OpenCode
-        run: npm install -g opencode-ai@2.0.32
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/opencode.tar.gz \
+            https://github.com/sst/opencode/releases/download/v2.2.7/opencode-linux-x64.tar.gz
+          tar -xzf /tmp/opencode.tar.gz -C /tmp
+          sudo mv /tmp/opencode /usr/local/bin/opencode
+          opencode --version
 
       - name: Fixture
         run: |

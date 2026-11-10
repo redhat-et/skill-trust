@@ -2,7 +2,8 @@
 
 This walkthrough wires the skill-trust OpenCode adapter into a project and
 shows every enforcement decision against a live OpenCode server. Commands were
-executed with OpenCode 2.0.32 and `skill-trust` built from this repository.
+executed with OpenCode 2.0.32 and 2.2.7, and `skill-trust` built from this
+repository.
 
 The project contains three skills:
 

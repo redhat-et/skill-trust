@@ -24,6 +24,7 @@ import {
   containingRoot,
   guardDecision,
   inputPaths,
+  normalizePath,
   runVerify,
   skillRootFromPath,
   toRecord,
@@ -104,6 +105,41 @@ describe("skillRootFromPath", () => {
   it("maps a SKILL.md path to its directory", () => {
     expect(skillRootFromPath("/proj/.opencode/skill/demo/SKILL.md")).toBe(
       "/proj/.opencode/skill/demo",
+    )
+  })
+})
+
+describe("normalizePath", () => {
+  it("collapses a symlinked ancestor to the canonical path", () => {
+    const real = fs.mkdtempSync(path.join(os.tmpdir(), "st-real-"))
+    const canonical = fs.realpathSync(real)
+    const skillDir = path.join(real, "demo")
+    fs.mkdirSync(skillDir)
+    // The alias deliberately goes through a symlinked prefix (note that
+    // os.tmpdir() itself is already a symlinked path on macOS).
+    const aliasParent = fs.mkdtempSync(path.join(os.tmpdir(), "st-alias-"))
+    const alias = path.join(aliasParent, "alias")
+    fs.symlinkSync(real, alias)
+
+    const viaAlias = normalizePath(path.join(alias, "demo", "scripts", "run.sh"))
+    expect(viaAlias.startsWith(canonical)).toBe(true)
+    expect(viaAlias.startsWith(alias)).toBe(false)
+  })
+
+  it("resolves the deepest existing ancestor for a not-yet-existing path", () => {
+    const real = fs.mkdtempSync(path.join(os.tmpdir(), "st-real-"))
+    const canonical = fs.realpathSync(real)
+    const aliasParent = fs.mkdtempSync(path.join(os.tmpdir(), "st-alias-"))
+    const alias = path.join(aliasParent, "alias")
+    fs.symlinkSync(real, alias)
+
+    const viaAlias = normalizePath(path.join(alias, "scripts", "not-yet.sh"))
+    expect(viaAlias.startsWith(canonical)).toBe(true)
+  })
+
+  it("passes through paths that do not exist at all", () => {
+    expect(normalizePath("/nonexistent/skill/scripts/run.sh")).toBe(
+      "/nonexistent/skill/scripts/run.sh",
     )
   })
 })
@@ -344,6 +380,40 @@ describe("skill-trust integration", () => {
     fs.chmodSync(path.join(dir, "scripts", "run.sh"), 0o644) // flipped executable bit
     const fresh = await runVerify(binary, dir, policyPath)
     expect(guardDecision(record, fresh).allowed).toBe(false)
+  })
+
+  it("cannot be bypassed through a symlinked path prefix", async () => {
+    // Regression: the managed root is recorded by its canonical path, but a
+    // command may reference the same files through a symlinked ancestor
+    // (for example /tmp vs /private/tmp). Containment must still match
+    // after normalization, and a modified helper must still block.
+    const dir = makeSkill("alias-demo")
+    signSkill(dir)
+    // Records are keyed by the canonical root, exactly as the plugin does
+    // via skillRootFromPath.
+    const root = normalizePath(dir)
+    const record = toRecord(root, await runVerify(binary, dir, policyPath))
+    expect(record.root).toBe(normalizePath(dir))
+
+    const aliasParent = fs.mkdtempSync(path.join(tmp, "alias-"))
+    const alias = path.join(aliasParent, "alias")
+    fs.symlinkSync(dir, alias)
+    expect(normalizePath(alias)).toBe(record.root)
+
+    // Tamper through the alias, then run the guard flow exactly as the
+    // plugin does: extract candidates from a shell command, normalize, and
+    // attribute to a managed root.
+    fs.writeFileSync(path.join(alias, "scripts", "util.py"), 'print("EVIL")\n')
+    const candidates = commandPaths(`python3 ${alias}/scripts/util.py`, aliasParent).map(
+      normalizePath,
+    )
+    const matched = containingRoot(candidates[0]!, [record.root])
+    expect(matched).toBe(record.root)
+
+    const fresh = await runVerify(binary, record.root, policyPath)
+    const outcome = guardDecision(record, fresh)
+    expect(outcome.allowed).toBe(false)
+    expect(outcome.code).toBe("ST-PREFLIGHT-CHANGED-AFTER-VERIFY")
   })
 
   it("fails closed for unsigned skills", async () => {

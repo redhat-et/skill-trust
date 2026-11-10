@@ -44,6 +44,7 @@ import {
   containingRoot,
   guardDecision,
   inputPaths,
+  normalizePath,
   runVerify,
   skillRootFromPath,
   toRecord,
@@ -187,7 +188,10 @@ export default Plugin.define({
     // regardless of language.
     async function guardPaths(candidates: string[]): Promise<void> {
       const checked = new Set<string>()
-      for (const candidate of candidates) {
+      for (const raw of candidates) {
+        // Canonicalize so a symlinked prefix (for example /tmp vs
+        // /private/tmp) cannot slip a managed path past containment.
+        const candidate = normalizePath(raw)
         const root = containingRoot(candidate, records.keys())
         if (!root || checked.has(root)) continue
         checked.add(root)
