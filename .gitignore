@@ -1,6 +1,9 @@
 # local agent helper scripts
 .local/
 
+# node dependencies
+node_modules/
+
 # macOS metadata
 .DS_Store
 

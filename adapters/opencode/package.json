@@ -1,0 +1,34 @@
+{
+  "name": "opencode-skill-trust",
+  "version": "0.1.0",
+  "description": "OpenCode adapter for skill-trust: verify signed agent skills before loading and before executing skill files",
+  "type": "module",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/redhat-et/skill-trust",
+    "directory": "adapters/opencode"
+  },
+  "exports": {
+    ".": "./index.ts",
+    "./lib": "./lib.ts"
+  },
+  "files": [
+    "index.ts",
+    "lib.ts",
+    "README.md",
+    "examples"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

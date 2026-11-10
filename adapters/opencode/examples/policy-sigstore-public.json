@@ -1,0 +1,19 @@
+{
+  "apiVersion": "skill-trust.policy/v1",
+  "name": "skills-sigstore-public",
+  "trustRoots": {
+    "sigstore": { "type": "sigstore-public" }
+  },
+  "signers": [
+    {
+      "name": "release-workflow",
+      "mode": "keyless",
+      "certificate": {
+        "identityRegexp": "^https://github\\.com/your-org/your-repo/\\.github/workflows/sign-skills\\.yml@refs/heads/main$",
+        "issuer": "https://token.actions.githubusercontent.com"
+      },
+      "trustRoot": "sigstore",
+      "requireTransparencyLog": true
+    }
+  ]
+}

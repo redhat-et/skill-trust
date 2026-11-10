@@ -1,0 +1,13 @@
+{
+  "apiVersion": "skill-trust.policy/v1",
+  "name": "skills-trusted-key",
+  "trustRoots": {},
+  "signers": [
+    {
+      "name": "release-key",
+      "mode": "key",
+      "publicKey": { "path": "trust/release.pub" },
+      "requireTransparencyLog": false
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "apiVersion": "skill-trust.policy/v1",
+  "name": "skills-rhtas",
+  "trustRoots": {
+    "rhtas": {
+      "type": "trusted-root",
+      "path": "trust/rhtas-trusted-root.json"
+    }
+  },
+  "signers": [
+    {
+      "name": "rhtas-release-workflow",
+      "mode": "keyless",
+      "certificate": {
+        "identityRegexp": "^https://github\\.com/your-org/your-repo/\\.github/workflows/sign-skills\\.yml@refs/heads/main$",
+        "issuer": "https://token.actions.githubusercontent.com"
+      },
+      "trustRoot": "rhtas",
+      "requireTransparencyLog": true
+    },
+    {
+      "name": "release-key",
+      "mode": "key",
+      "publicKey": { "path": "trust/release.pub" },
+      "trustRoot": "rhtas",
+      "requireTransparencyLog": true
+    }
+  ]
+}

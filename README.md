@@ -129,10 +129,12 @@ runtime that bypasses the verifier cannot be forced to honor a signature by a
 standalone file-format tool.
 
 The first reference integration is OpenCode. OpenCode supports skill loading,
-tool permissions, and plugin hooks before tool execution. The planned adapter
-will verify a skill before allowing it to load and will re-check the verified
-content identity before skill-associated execution. A modified Bash or Python
-script must be blocked before it runs.
+tool permissions, and plugin hooks before tool execution. The adapter
+([`adapters/opencode/`](adapters/opencode/)) verifies a skill before allowing
+it to load and re-checks the verified content identity before tool execution
+and before every shell command OpenCode spawns. A modified Bash or Python
+script is blocked before it runs. A complete live-server walkthrough is in
+[`examples/opencode-adapter-demo.md`](examples/opencode-adapter-demo.md).
 
 See the [architecture and enforcement design](docs/ARCHITECTURE.md) for the
 trust boundary and adapter contract, and the [threat model](docs/THREAT-MODEL.md)

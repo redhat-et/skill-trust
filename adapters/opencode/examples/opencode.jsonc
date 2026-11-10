@@ -1,0 +1,25 @@
+// Wiring the skill-trust adapter into an OpenCode project.
+//
+// Place trust material (release.pub, rhtas-trusted-root.json) and a policy
+// JSON somewhere in the project — here, under trust/ and policy/.
+// The skill-trust binary must be on PATH (or set "binary" to its path).
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    {
+      "package": "./adapters/opencode",
+      "options": {
+        // Required: path to the skill-trust policy JSON.
+        "policy": "./policy/skills.json",
+        // Optional: skill-trust binary (default: "skill-trust" from PATH).
+        "binary": "skill-trust",
+        // Optional: fail closed for unsigned skills (default: true).
+        // Set false for a report-only adoption phase: unsigned skills load
+        // with a warning, and only previously-verified skills are guarded.
+        "strict": true,
+        // Optional: periodic re-verification interval in ms (default: 30000).
+        "intervalMs": 30000
+      }
+    }
+  ]
+}

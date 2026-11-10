@@ -27,3 +27,28 @@ jobs:
       - name: Check formatting
         run: |
           test -z "$(gofmt -l cmd internal pkg)"
+
+  adapter:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: adapters/opencode
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        run: npm ci
+
+      - name: Type check
+        run: npm run check
+
+      - name: Test
+        run: npm test
