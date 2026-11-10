@@ -137,7 +137,8 @@ Per-signer evidence knobs:
   RFC 3161 timestamp from a trusted TSA.
 - `maxSignatureAge` (default `0s`, meaning no limit) — reject signatures
   whose evidence is older than the limit. Requires timestamps or log
-  integration times.
+  integration times. See [LIFECYCLE.md](LIFECYCLE.md) for how freshness
+  windows are used to withdraw and rotate trust.
 
 ## Evaluation semantics
 

@@ -22,10 +22,12 @@ exercising the complete signed boundary.
   instance (captured from a CI `e2e-sign` run), with
   `rhtas-trusted-root.json` pinned to the instance era that signed it.
 - `policy-rhtas.json`, `policy-public.json`,
-  `policy-rhtas-wrong-identity.json` — pinned policies for the
-  cross-root suite (`cross-root.json`), which proves the RHTAS bundle
-  verifies offline against the right root and fails closed against the
-  wrong trust root, the wrong signer identity, or modified content.
+  `policy-rhtas-wrong-identity.json`, `policy-rhtas-stale.json` — pinned
+  policies for the cross-root suite (`cross-root.json`), which proves the
+  RHTAS bundle verifies offline against the right root and fails closed
+  against the wrong trust root, the wrong signer identity, modified
+  content, and stale evidence (`maxSignatureAge` exceeded — deterministic,
+  since the committed bundle only gets older).
 
 `pkg/verify/fixtures_test.go` copies `valid-complete` (or
 `cross-root-rhtas`), applies each mutation, and asserts the documented

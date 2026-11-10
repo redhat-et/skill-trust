@@ -167,6 +167,12 @@ environment, targeting public Sigstore or RHTAS. Each release ships the
 skill package, manifest, bundle, verification report, and the consumer
 policy. See [docs/RELEASE.md](docs/RELEASE.md).
 
+Over the lifetime of a deployment, signer rotation, trust-root updates,
+and withdrawn skills are policy operations: verification is offline and
+distinguishes cryptographic validity from current authorization, with a
+defined block result for stale or withdrawn trust. See
+[docs/LIFECYCLE.md](docs/LIFECYCLE.md).
+
 ### The repository's own skills
 
 Skills under [`skills/`](skills/) are signed with the repository's demo
@@ -191,7 +197,9 @@ is:
 8. tamper and cross-platform test fixtures
    ([`testdata/fixtures/`](testdata/fixtures/), with expected allow/block
    results, running on Linux and macOS CI); and
-9. key-based signing and enterprise lifecycle controls.
+9. key-based signing and enterprise lifecycle controls
+   (rotation, trust-root updates, withdrawal:
+   [docs/LIFECYCLE.md](docs/LIFECYCLE.md)).
 
 ## Security limitations
 

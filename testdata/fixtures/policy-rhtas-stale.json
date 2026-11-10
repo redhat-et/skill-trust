@@ -1,0 +1,20 @@
+{
+  "apiVersion": "skill-trust.policy/v1",
+  "name": "cross-root-rhtas-stale",
+  "trustRoots": {
+    "rhtas": {"type": "trusted-root", "path": "rhtas-trusted-root.json"}
+  },
+  "signers": [
+    {
+      "name": "e2e-workflow",
+      "mode": "keyless",
+      "certificate": {
+        "identities": ["https://github.com/redhat-et/skill-trust/.github/workflows/e2e-sign.yml@refs/heads/main"],
+        "issuer": "https://token.actions.githubusercontent.com"
+      },
+      "trustRoot": "rhtas",
+      "requireTransparencyLog": true,
+      "maxSignatureAge": "1s"
+    }
+  ]
+}

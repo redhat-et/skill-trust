@@ -7,26 +7,52 @@
       "name": "rhtas-bundle-rhtas-policy",
       "fixture": "cross-root-rhtas",
       "policy": "policy-rhtas.json",
-      "expect": {"decision": "allow", "matchedSigner": "e2e-workflow"}
+      "expect": {
+        "decision": "allow",
+        "matchedSigner": "e2e-workflow"
+      }
     },
     {
       "name": "rhtas-bundle-public-policy",
       "fixture": "cross-root-rhtas",
       "policy": "policy-public.json",
-      "expect": {"decision": "block", "code": "ST-SIGNATURE-INVALID"}
+      "expect": {
+        "decision": "block",
+        "code": "ST-SIGNATURE-INVALID"
+      }
     },
     {
       "name": "rhtas-bundle-wrong-identity",
       "fixture": "cross-root-rhtas",
       "policy": "policy-rhtas-wrong-identity.json",
-      "expect": {"decision": "block", "code": "ST-SIGNATURE-INVALID"}
+      "expect": {
+        "decision": "block",
+        "code": "ST-SIGNATURE-INVALID"
+      }
     },
     {
       "name": "rhtas-bundle-tampered-content",
       "fixture": "cross-root-rhtas",
       "policy": "policy-rhtas.json",
-      "mutation": {"op": "write", "path": "scripts/util.py", "content": "print(\"tampered\")\n"},
-      "expect": {"decision": "block", "code": "ST-CONTENT-MISMATCH"}
+      "mutation": {
+        "op": "write",
+        "path": "scripts/util.py",
+        "content": "print(\"tampered\")\n"
+      },
+      "expect": {
+        "decision": "block",
+        "code": "ST-CONTENT-MISMATCH"
+      }
+    },
+    {
+      "name": "rhtas-bundle-stale-evidence",
+      "fixture": "cross-root-rhtas",
+      "policy": "policy-rhtas-stale.json",
+      "description": "the committed bundle is older than maxSignatureAge, so it fails closed with the defined stale-evidence result; deterministic because the bundle never gets younger",
+      "expect": {
+        "decision": "block",
+        "code": "ST-EVIDENCE-STALE"
+      }
     }
   ]
 }
