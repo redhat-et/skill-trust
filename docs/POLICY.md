@@ -217,6 +217,29 @@ The stages are independently callable as library functions, which is what
 makes the harness preflight contract possible without re-implementing any
 stage.
 
+## Go API
+
+The policy engine lives in `pkg/verify`:
+
+```go
+policy, err := verify.LoadPolicy("policy.json")     // parse + validate
+v, err := verify.New(policy)                         // resolve trust material
+result, err := v.VerifySkill("/path/to/skill")       // never executes content
+if result.Allowed() { /* load and run the skill */ }
+```
+
+- `ParsePolicy`/`LoadPolicy` reject malformed, contradictory, and empty
+  policies up front (sentinels: `ErrMalformedInput`, `ErrUnsupportedContent`,
+  `ErrPolicyFailure`).
+- `New` resolves every signer rule's trust material eagerly, so verification
+  never fails for lack of trust configuration (`ErrTrustUnavailable`,
+  `ErrCryptoFailure`).
+- `VerifySkill` reports decisions, not errors: allow/block plus structured
+  findings in `Result`, one `SignatureResult` per signer rule evaluated.
+  The library never executes skill content.
+- `Verifier.PreflightVerifier()` adapts the engine to the
+  [preflight contract](PREFLIGHT.md) for harness integration.
+
 ## Examples
 
 Example policies for common enterprise cases — public Sigstore workflow
