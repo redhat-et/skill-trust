@@ -81,6 +81,7 @@ jobs:
         with:
           policy: policy.json
           skill-dirs: demo-skill
+          discover-globs: ""
           binary: /tmp/skill-trust
           artifact-name: public-sigstore-action-reports
 
@@ -204,6 +205,7 @@ jobs:
         with:
           policy: policy.json
           skill-dirs: demo-skill
+          discover-globs: ""
           binary: /tmp/skill-trust
           artifact-name: rhtas-action-reports
 
