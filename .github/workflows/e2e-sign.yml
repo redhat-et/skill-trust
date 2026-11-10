@@ -76,6 +76,14 @@ jobs:
           test "$(jq -r .decision verify-result.json)" = allow
           test "$(jq -r '.signatures[0].matched' verify-result.json)" = true
 
+      - name: Verify via the reusable action (public trust root)
+        uses: ./.github/actions/verify-skills
+        with:
+          policy: policy.json
+          skill-dirs: demo-skill
+          binary: /tmp/skill-trust
+          artifact-name: public-sigstore-action-reports
+
       - name: Verify (provenance claims)
         run: |
           cat > policy-provenance.json <<EOF
@@ -190,6 +198,14 @@ jobs:
           /tmp/skill-trust verify demo-skill --policy policy.json --json | tee verify-result.json
           test "$(jq -r .decision verify-result.json)" = allow
           test "$(jq -r '.signatures[0].matched' verify-result.json)" = true
+
+      - name: Verify via the reusable action (RHTAS trust root)
+        uses: ./.github/actions/verify-skills
+        with:
+          policy: policy.json
+          skill-dirs: demo-skill
+          binary: /tmp/skill-trust
+          artifact-name: rhtas-action-reports
 
       - name: Tamper must block
         run: |

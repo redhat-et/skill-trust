@@ -142,14 +142,34 @@ for what a signature does and does not prove.
 
 ## GitHub Actions
 
-The planned workflows will:
+The repository ships a reusable verification action,
+[`verify-skills`](.github/actions/verify-skills/action.yml). It discovers
+skill directories (an explicit list and/or glob patterns), verifies each
+against a signer/provenance policy, publishes human-readable and JSON
+reports (run summary plus artifact), and fails when content changed without
+a valid replacement signature. The policy decides the trust material — the
+embedded public Sigstore good instance or any configured trusted root such
+as RHTAS — so the same action verifies key-based, public-Sigstore-keyless,
+and RHTAS-keyless signatures.
 
-- verify all changed skills on pull requests;
-- fail when signed content changes without a new signature;
+[`verify-skills`](.github/workflows/verify-pr.yml) runs it on every pull
+request and push against the repository's own signed skills under
+[`skills/`](skills/); the [`e2e-sign`](.github/workflows/e2e-sign.yml)
+workflow exercises it against keyless signatures on public Sigstore and
+RHTAS. Remaining planned work:
+
 - sign approved skills in trusted release/tag workflows using GitHub OIDC;
 - publish the skill package, manifest, bundle, and report as release assets; and
 - support switching between public Sigstore and an organization's RHTAS
   endpoints without changing the skill package format.
+
+### The repository's own skills
+
+Skills under [`skills/`](skills/) are signed with the repository's demo
+signing key; pull requests verify them through the action. After changing
+skill content, re-sign and commit the updated `.skill-trust/` control files
+(see [`.github/skill-trust/README.md`](.github/skill-trust/README.md) —
+the committed key is a CI tamper seal, not a trust root).
 
 ## Roadmap and issue backlog
 

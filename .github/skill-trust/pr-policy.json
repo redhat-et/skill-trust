@@ -1,0 +1,13 @@
+{
+  "apiVersion": "skill-trust.policy/v1",
+  "name": "skill-trust-pr-verification",
+  "trustRoots": {},
+  "signers": [
+    {
+      "name": "demo-signing-key",
+      "mode": "key",
+      "publicKey": { "path": ".github/skill-trust/demo-signing.pub" },
+      "requireTransparencyLog": false
+    }
+  ]
+}

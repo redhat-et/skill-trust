@@ -1,0 +1,182 @@
+name: Verify signed skills
+description: >
+  Verify skill-trust signed skills with the skill-trust verifier. Discovers
+  skill directories (explicit list and/or glob patterns), verifies each
+  against a signer/provenance policy, writes human-readable and JSON
+  reports, and fails when content changed without a valid replacement
+  signature. The policy decides the trust material: the embedded public
+  Sigstore good instance, or any configured trusted root such as RHTAS.
+inputs:
+  skill-dirs:
+    description: >-
+      Skill directories to verify, one per line (in addition to
+      discover-globs).
+    default: ""
+  discover-globs:
+    description: >-
+      Glob patterns matching SKILL.md files; the containing directories are
+      verified. One pattern per line.
+    default: |
+      skills/*/SKILL.md
+      .opencode/skill/*/SKILL.md
+  policy:
+    description: >-
+      Path to the skill-trust policy JSON (signer identity, provenance, and
+      trust material — see docs/POLICY.md).
+    required: true
+  binary:
+    description: >-
+      Path to a prebuilt skill-trust binary. When empty the action builds
+      ./cmd/skill-trust from the workspace (requires Go).
+    default: ""
+  report-dir:
+    description: Directory for JSON reports.
+    default: skill-trust-reports
+  artifact-name:
+    description: Name for the uploaded report artifact.
+    default: skill-trust-reports
+  allow-empty:
+    description: Whether succeeding with zero discovered skills is allowed.
+    default: "false"
+  fail-on-block:
+    description: Whether a block decision fails the action.
+    default: "true"
+outputs:
+  skills-found:
+    description: Number of skills verified.
+    value: ${{ steps.verify.outputs.skills-found }}
+  blocked:
+    description: Number of skills with a block decision.
+    value: ${{ steps.verify.outputs.blocked }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve skill-trust binary
+      shell: bash
+      env:
+        BINARY: ${{ inputs.binary }}
+      run: |
+        set -euo pipefail
+        if [ -n "$BINARY" ]; then
+          echo "SKILL_TRUST=$BINARY" >> "$GITHUB_ENV"
+        else
+          if ! command -v go >/dev/null 2>&1; then
+            echo "::error::no skill-trust binary provided and Go is not available to build one"
+            exit 1
+          fi
+          if [ ! -d cmd/skill-trust ]; then
+            echo "::error::no skill-trust binary provided and no ./cmd/skill-trust to build; supply the binary input"
+            exit 1
+          fi
+          go build -o /tmp/skill-trust ./cmd/skill-trust
+          echo "SKILL_TRUST=/tmp/skill-trust" >> "$GITHUB_ENV"
+        fi
+
+    - name: Verify skills
+      id: verify
+      shell: bash
+      env:
+        SKILL_DIRS: ${{ inputs.skill-dirs }}
+        DISCOVER_GLOBS: ${{ inputs.discover-globs }}
+        POLICY: ${{ inputs.policy }}
+        REPORT_DIR: ${{ inputs.report-dir }}
+        ALLOW_EMPTY: ${{ inputs.allow-empty }}
+        FAIL_ON_BLOCK: ${{ inputs.fail-on-block }}
+      run: |
+        set -euo pipefail
+        if [ ! -f "$POLICY" ]; then
+          echo "::error::policy not found: $POLICY"
+          exit 1
+        fi
+        mkdir -p "$REPORT_DIR/raw"
+
+        # Collect skill roots from explicit input and glob discovery.
+        declare -A seen=()
+        skill_list=()
+        while IFS= read -r dir; do
+          [ -z "$dir" ] && continue
+          if [ -n "${seen[$dir]:-}" ]; then continue
+          fi
+          seen[$dir]=1
+          skill_list+=("$dir")
+        done < <(printf '%s\n' "$SKILL_DIRS" | grep -v '^[[:space:]]*$' || true)
+
+        shopt -s nullglob
+        while IFS= read -r pattern; do
+          [ -z "$pattern" ] && continue
+          for f in $pattern; do
+            dir="$(dirname "$f")"
+            if [ -n "${seen[$dir]:-}" ]; then continue
+            fi
+            seen[$dir]=1
+            skill_list+=("$dir")
+          done
+        done < <(printf '%s\n' "$DISCOVER_GLOBS" | grep -v '^[[:space:]]*$' || true)
+
+        count=${#skill_list[@]}
+        echo "skills-found=$count" >> "$GITHUB_OUTPUT"
+        echo "Discovered $count skill director$( [ "$count" = 1 ] && echo y || echo ies )"
+
+        if [ "$count" = 0 ]; then
+          if [ "$ALLOW_EMPTY" = "true" ]; then
+            echo "::warning::no skills discovered"
+            echo "blocked=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "::error::no skills discovered; configure skill-dirs or discover-globs (or set allow-empty)"
+          exit 1
+        fi
+
+        blocked=0
+        rows=()
+        for dir in "${skill_list[@]}"; do
+          name="$(printf '%s' "$dir" | tr -c 'A-Za-z0-9._-' '_')"
+          report="$REPORT_DIR/raw/$name.json"
+          set +e
+          "$SKILL_TRUST" verify "$dir" --policy "$POLICY" --json > "$report"
+          code=$?
+          set -e
+          if [ "$code" = 2 ]; then
+            echo "::error::operational error verifying $dir (see $report)"
+            cat "$report" >&2 || true
+            exit 2
+          fi
+          jq --arg dir "$dir" '. + {dir: $dir}' "$report" > "$report.tmp" && mv "$report.tmp" "$report"
+          decision="$(jq -r .decision "$report")"
+          if [ "$decision" != "allow" ]; then
+            blocked=$((blocked + 1))
+          fi
+          reason="$(jq -r 'if .findings then (.findings | map(.code) | join(",")) else (.signer // "verified") end' "$report")"
+          rows+=("| \`$dir\` | $decision | $reason |")
+        done
+        echo "blocked=$blocked" >> "$GITHUB_OUTPUT"
+
+        # Human-readable report in the run summary.
+        {
+          echo "## skill-trust verification"
+          echo
+          echo "Policy: \`$POLICY\` — $count skill(s), $blocked blocked."
+          echo
+          echo "| Skill | Decision | Findings |"
+          echo "|-------|----------|----------|"
+          printf '%s\n' "${rows[@]}"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+        # Combined JSON report.
+        jq -s --arg policy "$POLICY" \
+          '{policy: $policy, generated: (now | todate), skills: .}' \
+          "$REPORT_DIR"/raw/*.json > "$REPORT_DIR/report.json"
+
+        if [ "$blocked" != 0 ] && [ "$FAIL_ON_BLOCK" = "true" ]; then
+          echo "::error::$blocked skill(s) failed verification; see the run summary and the skill-trust-reports artifact"
+          exit 1
+        fi
+
+    - name: Upload reports
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ inputs.report-dir }}
+        if-no-files-found: ignore

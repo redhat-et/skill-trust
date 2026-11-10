@@ -1,0 +1,26 @@
+name: verify-skills
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify signed skills
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Verify skills/ against the PR policy
+        uses: ./.github/actions/verify-skills
+        with:
+          policy: .github/skill-trust/pr-policy.json
+          discover-globs: "skills/*/SKILL.md"
