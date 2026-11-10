@@ -38,10 +38,11 @@ and [custom component configuration](https://docs.sigstore.dev/cosign/system_con
 
 ## Project status
 
-The design is complete and the implementation is in progress. The canonical
-manifest (spec and Go package with cross-platform test vectors) is shipped;
-signing, verification, the CLI, and harness adapters follow the
-[backlog order](docs/PROJECT-ISSUES.md).
+The design is complete and the core implementation is shipped: the canonical
+manifest (spec and Go package with cross-platform test vectors), key-based and
+keyless signing, the policy-driven verification engine, and the `skill-trust`
+CLI. Harness adapters, GitHub Actions workflows, and public/RHTAS signing
+fixtures follow the [backlog order](docs/PROJECT-ISSUES.md).
 
 ## Skill format and signed boundary
 
@@ -75,27 +76,51 @@ the hash algorithm. Host-specific timestamps, owners, absolute paths, and
 other unstable filesystem metadata are not signed. The full specification
 with test vectors is in [docs/MANIFEST.md](docs/MANIFEST.md).
 
-## Planned command-line interface
-
-The initial Go binary is expected to provide:
+## Command-line interface
 
 ```console
-skill-trust manifest ./my-skill --output .skill-trust/manifest.json
-skill-trust sign ./my-skill --bundle .skill-trust/bundle.sigstore.json
-skill-trust verify ./my-skill
+# Compute the canonical manifest of a skill directory:
+skill-trust manifest ./my-skill
+
+# Sign with a release key (offline; no log entry or timestamp):
+skill-trust sign ./my-skill --key release.key
+
+# Sign keyless in CI (Fulcio + Rekor + TSA per a services file):
+skill-trust sign ./my-skill --id-token "$OIDC_TOKEN" --services services.json
+
+# Verify a skill against an organization policy:
+skill-trust verify ./my-skill --policy policy.json
+
+# Inspect the control files of a signed skill (no policy, no crypto):
 skill-trust inspect ./my-skill
 ```
 
-Keyless signing is the first signing workflow. Public Sigstore is the initial
+Every command accepts `--json` for machine-readable output. Stable exit
+codes:
+
+| Code | Meaning                                                              |
+| ---- | -------------------------------------------------------------------- |
+| 0    | success; for `verify`, the skill is allowed                          |
+| 1    | verification decision: the skill is blocked (findings reported)      |
+| 2    | operational error (arguments, unreadable input, trust unavailable)   |
+
+`verify` is fail closed: any missing control file, any content difference,
+or any failed check blocks the skill, and no decision is rendered without
+usable trust material. The CLI never executes, imports, or interprets
+skill content.
+
+Keyless signing is the primary workflow. Public Sigstore is the initial
 CI test target, and RHTAS is supported through configurable Fulcio, Rekor,
-TUF/trusted-root, and timestamp services. Key-based signing, including KMS or
-hardware-backed keys where supported by the underlying Sigstore tooling, is a
-planned follow-on mode.
+TUF/trusted-root, and timestamp services ([trust
+configuration](docs/TRUST-CONFIG.md)). Key-based signing with PEM keys is
+shipped; KMS or hardware-backed keys interoperate through cosign-produced
+bundles. Organization policy can require specific signer identities, OIDC
+issuers, source/provenance claims, evidence (transparency log entries,
+RFC 3161 timestamps), freshness limits, and trust roots
+([policy reference](docs/POLICY.md)).
 
 Verification is offline-capable when the distributed bundle and trusted-root
-material are available locally. Organization policy can additionally require
-specific signer identities, OIDC issuers, source/provenance claims, and trust
-roots.
+material are available locally.
 
 ## Harness enforcement
 

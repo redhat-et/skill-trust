@@ -7,6 +7,7 @@ require (
 	github.com/sigstore/rekor v1.5.5
 	github.com/sigstore/sigstore v1.11.3
 	github.com/sigstore/sigstore-go v1.4.0
+	github.com/spf13/cobra v1.10.2
 	google.golang.org/protobuf v1.36.12
 )
 
@@ -60,7 +61,6 @@ require (
 	github.com/shibumi/go-pathspec v1.3.0 // indirect
 	github.com/sigstore/rekor-tiles/v2 v2.4.0 // indirect
 	github.com/sigstore/timestamp-authority/v2 v2.2.0 // indirect
-	github.com/spf13/cobra v1.10.2 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/theupdateframework/go-tuf v0.7.0 // indirect
 	github.com/theupdateframework/go-tuf/v2 v2.4.2 // indirect

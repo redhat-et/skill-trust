@@ -73,36 +73,37 @@ type Options struct {
 type Result struct {
 	// ManifestDigest is the signed content identity (SHA-256 of the
 	// canonical manifest bytes).
-	ManifestDigest string
+	ManifestDigest string `json:"manifestDigest"`
 
 	// BundlePath is the written bundle control file.
-	BundlePath string
+	BundlePath string `json:"bundlePath"`
 
 	// ManifestPath is the written manifest control file.
-	ManifestPath string
+	ManifestPath string `json:"manifestPath"`
 
 	// KeyHint is set for key-based signing: the public key hint embedded
 	// in the bundle.
-	KeyHint string
+	KeyHint string `json:"keyHint,omitempty"`
 
 	// Certificate is set for keyless signing: the Fulcio-issued signer
-	// certificate.
-	Certificate *x509.Certificate
+	// certificate. It is excluded from JSON output; Identity and Issuer
+	// carry the relevant claims.
+	Certificate *x509.Certificate `json:"-"`
 
 	// Identity is the signer identity (certificate SAN) for keyless
 	// signing.
-	Identity string
+	Identity string `json:"identity,omitempty"`
 
 	// Issuer is the OIDC issuer recorded in the certificate for keyless
 	// signing.
-	Issuer string
+	Issuer string `json:"issuer,omitempty"`
 
 	// HasTlogEntry reports whether a transparency log entry with an
 	// offline-verifiable inclusion proof was embedded.
-	HasTlogEntry bool
+	HasTlogEntry bool `json:"hasTlogEntry"`
 
 	// HasTimestamp reports whether an RFC 3161 timestamp was embedded.
-	HasTimestamp bool
+	HasTimestamp bool `json:"hasTimestamp"`
 }
 
 // Skill signs the skill rooted at dir.
