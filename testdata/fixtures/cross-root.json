@@ -1,0 +1,32 @@
+{
+  "apiVersion": "skill-trust.fixtures/v1",
+  "name": "cross-root-fixtures",
+  "description": "A bundle signed keyless by the e2e-sign workflow against the shared RHTAS instance (captured from a CI run), verified offline against pinned policies. The RHTAS trusted root is committed beside the bundle, pinned to the instance era that signed it. These fixtures prove that an RHTAS-signed bundle verifies with the local binary without any network access, and that verification fails closed against the wrong trust root, the wrong signer identity, or modified content. No OCI registry is involved anywhere in the flow.",
+  "cases": [
+    {
+      "name": "rhtas-bundle-rhtas-policy",
+      "fixture": "cross-root-rhtas",
+      "policy": "policy-rhtas.json",
+      "expect": {"decision": "allow", "matchedSigner": "e2e-workflow"}
+    },
+    {
+      "name": "rhtas-bundle-public-policy",
+      "fixture": "cross-root-rhtas",
+      "policy": "policy-public.json",
+      "expect": {"decision": "block", "code": "ST-SIGNATURE-INVALID"}
+    },
+    {
+      "name": "rhtas-bundle-wrong-identity",
+      "fixture": "cross-root-rhtas",
+      "policy": "policy-rhtas-wrong-identity.json",
+      "expect": {"decision": "block", "code": "ST-SIGNATURE-INVALID"}
+    },
+    {
+      "name": "rhtas-bundle-tampered-content",
+      "fixture": "cross-root-rhtas",
+      "policy": "policy-rhtas.json",
+      "mutation": {"op": "write", "path": "scripts/util.py", "content": "print(\"tampered\")\n"},
+      "expect": {"decision": "block", "code": "ST-CONTENT-MISMATCH"}
+    }
+  ]
+}

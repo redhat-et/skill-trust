@@ -112,7 +112,9 @@ skill content.
 Keyless signing is the primary workflow. Public Sigstore is the initial
 CI test target, and RHTAS is supported through configurable Fulcio, Rekor,
 TUF/trusted-root, and timestamp services ([trust
-configuration](docs/TRUST-CONFIG.md)). Key-based signing with PEM keys is
+configuration](docs/TRUST-CONFIG.md), [operator
+guide](docs/RHTAS.md) — including offline verification of committed
+RHTAS-signed fixtures). Key-based signing with PEM keys is
 shipped; KMS or hardware-backed keys interoperate through cosign-produced
 bundles. Organization policy can require specific signer identities, OIDC
 issuers, source/provenance claims, evidence (transparency log entries,

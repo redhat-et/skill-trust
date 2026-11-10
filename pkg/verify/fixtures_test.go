@@ -164,10 +164,10 @@ func applyMutation(t *testing.T, dir string, m *fixtureMutation) {
 	}
 }
 
-// loadFixturePolicy loads the committed fixture policy, rewriting the
-// relative public-key path to an absolute one so the policy works from any
-// working directory (the committed file stays usable from the CLI, where
-// it resolves relative to the fixtures directory).
+// loadFixturePolicy loads a committed fixture policy, rewriting relative
+// key and trust-root paths to absolute ones so the policy works from any
+// working directory (the committed files stay usable from the CLI, where
+// they resolve relative to the fixtures directory).
 func loadFixturePolicy(path string) (*Policy, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -177,14 +177,24 @@ func loadFixturePolicy(path string) (*Policy, error) {
 	if err := json.Unmarshal(raw, &doc); err != nil {
 		return nil, err
 	}
+	base := filepath.Dir(path)
 	for _, s := range doc["signers"].([]any) {
 		rule := s.(map[string]any)
-		pk, ok := rule["publicKey"].(map[string]any)
-		if !ok {
-			continue
+		if pk, ok := rule["publicKey"].(map[string]any); ok {
+			if rel, ok := pk["path"].(string); ok {
+				pk["path"] = filepath.Join(base, filepath.FromSlash(rel))
+			}
 		}
-		if rel, ok := pk["path"].(string); ok {
-			pk["path"] = filepath.Join(filepath.Dir(path), filepath.FromSlash(rel))
+	}
+	if roots, ok := doc["trustRoots"].(map[string]any); ok {
+		for _, r := range roots {
+			root, ok := r.(map[string]any)
+			if !ok || root["type"] != "trusted-root" {
+				continue
+			}
+			if rel, ok := root["path"].(string); ok {
+				root["path"] = filepath.Join(base, filepath.FromSlash(rel))
+			}
 		}
 	}
 	patched, err := json.Marshal(doc)
@@ -245,8 +255,8 @@ func TestSignedFixtureSuite(t *testing.T) {
 				if tc.Expect.Code == "" {
 					t.Fatal("expected.json block case is missing a finding code")
 				}
-				if result.Findings[0].Code != tc.Expect.Code {
-					t.Errorf("first finding = %s, want %s (findings: %s)", result.Findings[0].Code, tc.Expect.Code, findingSummary(result))
+				if !hasFindingCode(result, tc.Expect.Code) {
+					t.Errorf("no finding with code %s (findings: %s)", tc.Expect.Code, findingSummary(result))
 				}
 			default:
 				t.Fatalf("unknown expected decision %q", tc.Expect.Decision)
@@ -298,4 +308,94 @@ func findingSummary(r Result) string {
 		out += f.Code + ": " + f.Message
 	}
 	return out
+}
+
+// The cross-root suite: a bundle signed keyless against the shared RHTAS
+// instance (captured from a CI run) verified offline against pinned
+// policies, including failure modes against the wrong trust root, the
+// wrong signer identity, and modified content.
+type crossRootCase struct {
+	Name     string           `json:"name"`
+	Fixture  string           `json:"fixture"`
+	Policy   string           `json:"policy"`
+	Mutation *fixtureMutation `json:"mutation"`
+	Expect   fixtureExpect    `json:"expect"`
+}
+
+type crossRootSuite struct {
+	Cases []crossRootCase `json:"cases"`
+}
+
+func TestCrossRootFixtureSuite(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "testdata", "fixtures", "cross-root.json"))
+	if err != nil {
+		t.Fatalf("reading cross-root.json: %v", err)
+	}
+	var suite crossRootSuite
+	if err := json.Unmarshal(raw, &suite); err != nil {
+		t.Fatalf("parsing cross-root.json: %v", err)
+	}
+	if len(suite.Cases) == 0 {
+		t.Fatal("cross-root.json has no cases")
+	}
+
+	fixturesDir := filepath.Join("..", "..", "testdata", "fixtures")
+
+	for _, tc := range suite.Cases {
+		t.Run(tc.Name, func(t *testing.T) {
+			fixtureDir := filepath.Join(fixturesDir, tc.Fixture)
+			policy, err := loadFixturePolicy(filepath.Join(fixturesDir, tc.Policy))
+			if err != nil {
+				t.Fatalf("loading policy: %v", err)
+			}
+			verifier, err := New(policy)
+			if err != nil {
+				t.Fatalf("New verifier: %v", err)
+			}
+
+			dir := copyFixture(t, fixtureDir)
+			applyMutation(t, dir, tc.Mutation)
+
+			result, err := verifier.VerifySkill(dir)
+			if err != nil {
+				t.Fatalf("VerifySkill: %v", err)
+			}
+
+			if string(result.Decision) != tc.Expect.Decision {
+				t.Errorf("decision = %s, want %s (findings: %s)", result.Decision, tc.Expect.Decision, findingSummary(result))
+			}
+			switch tc.Expect.Decision {
+			case "allow":
+				if len(result.Signatures) != 1 || !result.Signatures[0].Matched {
+					t.Errorf("expected the signature to match, got %+v", result.Signatures)
+				}
+			case "block":
+				// A block's reason may be recorded at the top level (for
+				// example ST-CONTENT-MISMATCH) or per signature rule (for
+				// example ST-SIGNATURE-INVALID under ST-POLICY-NO-MATCH),
+				// so the expected code is matched against the union.
+				if !hasFindingCode(result, tc.Expect.Code) {
+					t.Errorf("no finding with code %s (findings: %s)", tc.Expect.Code, findingSummary(result))
+				}
+			}
+		})
+	}
+}
+
+// hasFindingCode reports whether the code appears in the result's
+// top-level findings or in any per-signature-rule finding.
+func hasFindingCode(r Result, code string) bool {
+	for _, f := range r.Findings {
+		if f.Code == code {
+			return true
+		}
+	}
+	for _, s := range r.Signatures {
+		for _, f := range s.Findings {
+			if f.Code == code {
+				return true
+			}
+		}
+	}
+	return false
 }

@@ -1,0 +1,19 @@
+{
+  "apiVersion": "skill-trust.policy/v1",
+  "name": "cross-root-rhtas-wrong-identity",
+  "trustRoots": {
+    "rhtas": {"type": "trusted-root", "path": "rhtas-trusted-root.json"}
+  },
+  "signers": [
+    {
+      "name": "some-other-workflow",
+      "mode": "keyless",
+      "certificate": {
+        "identities": ["https://github.com/redhat-et/skill-trust/.github/workflows/some-other.yml@refs/heads/main"],
+        "issuer": "https://token.actions.githubusercontent.com"
+      },
+      "trustRoot": "rhtas",
+      "requireTransparencyLog": true
+    }
+  ]
+}

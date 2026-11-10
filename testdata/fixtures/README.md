@@ -18,9 +18,18 @@ exercising the complete signed boundary.
   every file category, added / deleted / renamed files, executable-bit
   flips in both directions, control-file removal, and an embedded-manifest
   forgery).
+- `cross-root-rhtas/` — a bundle signed keyless against the shared RHTAS
+  instance (captured from a CI `e2e-sign` run), with
+  `rhtas-trusted-root.json` pinned to the instance era that signed it.
+- `policy-rhtas.json`, `policy-public.json`,
+  `policy-rhtas-wrong-identity.json` — pinned policies for the
+  cross-root suite (`cross-root.json`), which proves the RHTAS bundle
+  verifies offline against the right root and fails closed against the
+  wrong trust root, the wrong signer identity, or modified content.
 
-`pkg/verify/fixtures_test.go` copies `valid-complete`, applies each
-mutation, and asserts the documented decision and finding code. The golden
+`pkg/verify/fixtures_test.go` copies `valid-complete` (or
+`cross-root-rhtas`), applies each mutation, and asserts the documented
+decision and finding code. The golden
 digest is recomputed from the checked-out bytes, so the test vectors prove
 manifest stability across platforms: the suite runs on Linux and macOS
 runners in CI (`ci.yml`), and any platform difference in content digests
