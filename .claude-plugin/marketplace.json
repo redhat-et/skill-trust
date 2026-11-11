@@ -1,0 +1,13 @@
+{
+  "name": "skill-trust",
+  "owner": {
+    "name": "redhat-et"
+  },
+  "plugins": [
+    {
+      "name": "skill-trust",
+      "source": "./adapters/claude-code",
+      "description": "Verify LLM tool calls against Sigstore-signed trust policies"
+    }
+  ]
+}

@@ -69,7 +69,7 @@ Exit codes: 0 success (verify: allowed), 1 blocked, 2 operational error.`,
 
   # Inspect the control files of a signed skill (no policy, no crypto):
   skill-trust inspect ./my-skill`,
-	Version: version(),
+	Version: Version().Version,
 }
 
 // Execute runs the CLI and returns the process exit code.
@@ -92,16 +92,6 @@ func Execute() int {
 func init() {
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false,
 		"emit machine-readable JSON on stdout")
-}
-
-// version reports the build version from embedded VCS information when
-// available.
-func version() string {
-	if v := os.Getenv("SKILL_TRUST_VERSION"); v != "" {
-		return v
-	}
-	// best-effort: builds from a git worktree carry (devel) with vcs info
-	return "devel"
 }
 
 // fail prints an operational error and terminates with ExitError.

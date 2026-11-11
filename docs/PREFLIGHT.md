@@ -155,10 +155,21 @@ expected/observed digests in operator-facing logs.
 `pkg/preflight` is concurrency-safe and has no dependencies beyond
 `pkg/manifest`. It never implements a second manifest or signature
 algorithm — all trust decisions flow through the injected `Verifier`.
-The reference OpenCode adapter (`adapters/opencode`) is a thin wrapper:
-it calls `VerifyBeforeLoad` when a skill is activated and
-`GuardExecution` in the tool pre-execution hook for every Bash call that
-references a skill path.
+
+Two reference adapters implement this contract:
+
+- **OpenCode** (`adapters/opencode`): a thin wrapper that calls
+  `VerifyBeforeLoad` when a skill is activated and `GuardExecution` in the
+  tool pre-execution hook for every Bash call that references a skill path.
+- **Claude Code** (`adapters/claude-code`): a plugin adapter using hook
+  commands (`skill-trust hook claude-code session-start` /
+  `pre-tool-use` / `user-prompt-submit`). The hook logic lives in
+  `internal/claudecode` and calls the verifier in-process (no subprocess).
+  Session state is stored in
+  `$CLAUDE_PLUGIN_DATA/sessions/state-<session_id>.json`. The policy path
+  itself should be absolute (a relative path is resolved against the hook
+  process's cwd); relative paths inside the policy JSON are resolved against
+  the policy file's directory (not the process cwd, as `verify` does).
 
 ## References
 

@@ -1,0 +1,13 @@
+{
+ "session_id": "71f29257-0121-478f-8a62-98461e89d711",
+ "transcript_path": "/home/nolear/.claude/projects/-tmp-st-probe-proj/71f29257-0121-478f-8a62-98461e89d711.jsonl",
+ "cwd": "/tmp/st-probe/proj",
+ "prompt_id": "52e97f63-1a2f-45a4-bc1e-5b745566bc18",
+ "permission_mode": "default",
+ "hook_event_name": "PreToolUse",
+ "tool_name": "Read",
+ "tool_input": {
+  "file_path": "/tmp/st-probe/proj/.claude/skills/probe-skill/SKILL.md"
+ },
+ "tool_use_id": "toolu_vrtx_01RMSeLG2HJkwMUXD7xRtAyk"
+}

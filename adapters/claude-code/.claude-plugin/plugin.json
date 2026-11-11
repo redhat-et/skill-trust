@@ -1,0 +1,29 @@
+{
+  "name": "skill-trust",
+  "version": "0.2.0",
+  "description": "Verify LLM tool calls against Sigstore-signed trust policies",
+  "repository": "https://github.com/redhat-et/skill-trust",
+  "hooks": "./hooks/hooks.json",
+  "userConfig": {
+    "policy": {
+      "type": "file",
+      "title": "Trust Policy",
+      "description": "Path to the trust policy JSON file",
+      "required": true
+    },
+    "strict": {
+      "type": "boolean",
+      "title": "Strict Mode",
+      "description": "Block tool use on verification failure",
+      "required": false,
+      "default": true
+    },
+    "binary": {
+      "type": "string",
+      "title": "Binary Path",
+      "description": "Path to the skill-trust binary",
+      "required": false,
+      "default": "skill-trust"
+    }
+  }
+}

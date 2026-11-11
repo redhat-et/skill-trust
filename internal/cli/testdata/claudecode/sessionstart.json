@@ -1,0 +1,7 @@
+{
+ "session_id": "6c01f6b3-6f0c-4626-8e1f-be2f2efdcdac",
+ "transcript_path": "/home/nolear/.claude/projects/-tmp-st-probe-proj/6c01f6b3-6f0c-4626-8e1f-be2f2efdcdac.jsonl",
+ "cwd": "/tmp/st-probe/proj",
+ "hook_event_name": "SessionStart",
+ "source": "startup"
+}

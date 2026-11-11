@@ -1,0 +1,9 @@
+{
+ "session_id": "6c01f6b3-6f0c-4626-8e1f-be2f2efdcdac",
+ "transcript_path": "/home/nolear/.claude/projects/-tmp-st-probe-proj/6c01f6b3-6f0c-4626-8e1f-be2f2efdcdac.jsonl",
+ "cwd": "/tmp/st-probe/proj",
+ "prompt_id": "5724ee5a-60a9-4383-a7e5-89a660a6aeab",
+ "permission_mode": "default",
+ "hook_event_name": "UserPromptSubmit",
+ "prompt": "/probe-skill"
+}

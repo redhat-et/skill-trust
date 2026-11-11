@@ -26,14 +26,17 @@ func runCLI(t *testing.T, args ...string) (int, string) {
 	verifyPolicy = ""
 	verifyReport = false
 	signKey, signIDToken, signServices = "", "", ""
+	hookPolicyPath = ""
+	hookStrict = true
 
 	var buf bytes.Buffer
 	rootCmd.SetOut(&buf)
 	rootCmd.SetErr(&buf)
 	rootCmd.SetArgs(args)
+	rootCmd.SetIn(nil) // Reset stdin
 	err := rootCmd.Execute()
 	code := exitCode
-	if err != nil {
+	if err != nil && exitCode == ExitSuccess {
 		code = ExitError
 	}
 	return code, buf.String()

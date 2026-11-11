@@ -79,6 +79,9 @@ with test vectors is in [docs/MANIFEST.md](docs/MANIFEST.md).
 ## Command-line interface
 
 ```console
+# Print version information:
+skill-trust version
+
 # Compute the canonical manifest of a skill directory:
 skill-trust manifest ./my-skill
 
@@ -131,13 +134,17 @@ The verifier is authoritative only when a harness uses it. An arbitrary agent
 runtime that bypasses the verifier cannot be forced to honor a signature by a
 standalone file-format tool.
 
-The first reference integration is OpenCode. OpenCode supports skill loading,
-tool permissions, and plugin hooks before tool execution. The adapter
-([`adapters/opencode/`](adapters/opencode/)) verifies a skill before allowing
-it to load and re-checks the verified content identity before tool execution
-and before every shell command OpenCode spawns. A modified Bash or Python
-script is blocked before it runs. A complete live-server walkthrough is in
-[`examples/opencode-adapter-demo.md`](examples/opencode-adapter-demo.md).
+Two reference adapters implement the preflight contract:
+
+- **OpenCode** ([`adapters/opencode/`](adapters/opencode/)): verifies skills
+  before load, re-checks before tool execution and before every shell command.
+  A modified Bash or Python script is blocked before it runs. A complete
+  live-server walkthrough is in [`examples/opencode-adapter-demo.md`](examples/opencode-adapter-demo.md).
+- **Claude Code** ([`adapters/claude-code/`](adapters/claude-code/)): plugin
+  adapter using SessionStart, PreToolUse, and UserPromptSubmit hooks to verify
+  skills before load, re-verify before any tool touching a skill file, and
+  block tampered or unsigned skills. A complete hook-invocation walkthrough is
+  in [`examples/claude-code-adapter-demo.md`](examples/claude-code-adapter-demo.md).
 
 See the [architecture and enforcement design](docs/ARCHITECTURE.md) for the
 trust boundary and adapter contract, and the [threat model](docs/THREAT-MODEL.md)

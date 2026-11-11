@@ -82,6 +82,24 @@ restrictive umask).
 
 ## Releasing
 
+Before creating a release tag:
+
+1. Update `adapters/claude-code/.claude-plugin/plugin.json` `version` field to
+   match the tag version (without the `v` prefix). For example, for tag
+   `v0.2.0`, the plugin version should be `0.2.0`.
+2. The `release-sign` workflow enforces this lockstep on tag pushes: it runs
+   `go test ./internal/claudecode -run '^TestPluginVersionMatchesTag$'` with
+   `SKILL_TRUST_REQUIRE_TAG_CHECK=1` and fails before signing if the plugin
+   version does not match the tag, if the tag environment is missing, or if
+   the test did not run at all. You can run the same check locally:
+
+   ```console
+   $ GITHUB_REF_TYPE=tag GITHUB_REF_NAME=v0.2.0 SKILL_TRUST_REQUIRE_TAG_CHECK=1 \
+       go test ./internal/claudecode -run '^TestPluginVersionMatchesTag$' -v
+   ```
+
+Then tag and push:
+
 ```console
 $ git tag v0.1.0
 $ git push origin v0.1.0
