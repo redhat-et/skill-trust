@@ -359,7 +359,10 @@ var ReservedControlFiles = []string{ManifestFile, BundleFile, ReportFile}
 func UnexpectedControlEntries(dir string) ([]ControlEntry, error) {
 	entries, err := os.ReadDir(filepath.Join(dir, ControlDir))
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrMalformedInput, err)
+		// Both sentinels wrap the underlying error so callers can
+		// distinguish an absent control directory (an unsigned skill)
+		// from an unreadable one.
+		return nil, fmt.Errorf("%w: %w", ErrMalformedInput, err)
 	}
 
 	reserved := make(map[string]bool, len(ReservedControlFiles))
@@ -396,11 +399,43 @@ func controlKind(e fs.DirEntry) string {
 	}
 }
 
+// ReadControlFile reads the control file name in the skill rooted at
+// dir, refusing to read anything that is not a regular file. The file
+// is opened without following symlinks and without blocking, then
+// stat'd through the open handle, so a crafted package cannot hang the
+// reader (a FIFO named manifest.json would block a plain read until a
+// writer appears) or feed it without bound (a symlink to an unbounded
+// source); both are rejected before a single byte is read. Verification
+// additionally inventories the control directory (see
+// UnexpectedControlEntries) before any control file is read.
+//
+// On platforms without O_NOFOLLOW the open falls back to a plain open;
+// symlinks under reserved names are still reported by
+// UnexpectedControlEntries, which runs first during verification.
+func ReadControlFile(dir, name string) ([]byte, error) {
+	path := ControlPath(dir, name)
+	f, err := openNoFollow(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("%w: %s is not a regular file", ErrUnsupportedContent, path)
+	}
+	return io.ReadAll(f)
+}
+
 // LoadControlManifest reads and parses .skill-trust/manifest.json from the
 // skill rooted at dir. The returned manifest is validated but is not
-// compared against the directory contents; use Compare for that.
+// compared against the directory contents; use Compare for that. The
+// control file is read through ReadControlFile, so only a regular file
+// is ever read.
 func LoadControlManifest(dir string) (*Manifest, error) {
-	raw, err := os.ReadFile(ControlPath(dir, ManifestFile))
+	raw, err := ReadControlFile(dir, ManifestFile)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrMalformedInput, err)
 	}

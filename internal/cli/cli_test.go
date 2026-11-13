@@ -432,3 +432,37 @@ func TestInspectReportsUnexpectedControlEntries(t *testing.T) {
 		t.Errorf("unexpected inspect JSON:\n%s", out)
 	}
 }
+
+// TestInspectNonRegularBundleNotRead pins the inspect half of the
+// read-ordering fix: a symlink (or other non-regular entry) named
+// bundle.sigstore.json must not be read, reported as an absent bundle, and
+// flagged by the control-directory inventory instead.
+func TestInspectNonRegularBundleNotRead(t *testing.T) {
+	dir, _ := signedSkill(t)
+	bundlePath := filepath.Join(dir, ".skill-trust", "bundle.sigstore.json")
+	raw, err := os.ReadFile(bundlePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(t.TempDir(), "swapped-bundle.json")
+	if err := os.WriteFile(target, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(bundlePath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, bundlePath); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	code, out := runCLI(t, "inspect", dir)
+	if code != ExitSuccess {
+		t.Fatalf("exit = %d, output:\n%s", code, out)
+	}
+	if !strings.Contains(out, "bundle:") || !strings.Contains(out, "missing") {
+		t.Errorf("non-regular bundle not reported missing:\n%s", out)
+	}
+	if !strings.Contains(out, "unexpected") {
+		t.Errorf("non-regular bundle not flagged by inventory:\n%s", out)
+	}
+}

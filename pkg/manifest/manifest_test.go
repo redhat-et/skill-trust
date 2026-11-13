@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -607,5 +608,84 @@ func TestUnexpectedControlEntriesMissingDir(t *testing.T) {
 	}
 	if _, err := UnexpectedControlEntries(dir); !errors.Is(err, ErrMalformedInput) {
 		t.Errorf("err = %v, want ErrMalformedInput", err)
+	}
+}
+
+func TestReadControlFileRegular(t *testing.T) {
+	dir := t.TempDir()
+	control := filepath.Join(dir, ControlDir)
+	if err := os.MkdirAll(control, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(control, ManifestFile), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := ReadControlFile(dir, ManifestFile)
+	if err != nil {
+		t.Fatalf("ReadControlFile: %v", err)
+	}
+	if string(raw) != "{}\n" {
+		t.Errorf("raw = %q", raw)
+	}
+}
+
+func TestReadControlFileRejectsSymlink(t *testing.T) {
+	dir := t.TempDir()
+	control := filepath.Join(dir, ControlDir)
+	if err := os.MkdirAll(control, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(dir, "elsewhere.json")
+	if err := os.WriteFile(target, []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(control, ManifestFile)); err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(control, ManifestFile)); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	_, err := ReadControlFile(dir, ManifestFile)
+	if err == nil {
+		t.Fatal("symlinked control file was read")
+	}
+}
+
+func TestReadControlFileRejectsDirectory(t *testing.T) {
+	dir := t.TempDir()
+	control := filepath.Join(dir, ControlDir)
+	if err := os.MkdirAll(filepath.Join(control, BundleFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, err := ReadControlFile(dir, BundleFile)
+	if !errors.Is(err, ErrUnsupportedContent) {
+		t.Errorf("err = %v, want ErrUnsupportedContent", err)
+	}
+}
+
+// TestReadControlFileRejectsFIFOWithoutBlocking pins the availability
+// property: opening the FIFO with O_NONBLOCK must return immediately
+// (with no writer attached), and the regular-file check must reject it
+// before any read. A plain os.ReadFile would block forever here.
+func TestReadControlFileRejectsFIFOWithoutBlocking(t *testing.T) {
+	dir := t.TempDir()
+	control := filepath.Join(dir, ControlDir)
+	if err := os.MkdirAll(control, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := mkfifo(filepath.Join(control, ManifestFile)); err != nil {
+		t.Skipf("fifo unavailable: %v", err)
+	}
+	_, err := ReadControlFile(dir, ManifestFile)
+	if !errors.Is(err, ErrUnsupportedContent) {
+		t.Errorf("err = %v, want ErrUnsupportedContent", err)
+	}
+}
+
+func TestReadControlFileMissing(t *testing.T) {
+	dir := t.TempDir()
+	_, err := ReadControlFile(dir, ManifestFile)
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("err = %v, want fs.ErrNotExist", err)
 	}
 }

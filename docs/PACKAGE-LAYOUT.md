@@ -78,7 +78,12 @@ is not signed content and is not read to make decisions.
    name — is unexpected contamination: it would ship with the package
    while being neither signed nor read. Verification blocks with an
    `ST-METADATA-UNEXPECTED` finding per unexpected entry, and `inspect`
-   lists them.
+   lists them. The inventory runs before any control file is read, so a
+   crafted entry cannot hang or exhaust the reader: a FIFO named
+   `manifest.json` would block a plain read until a writer appears, and a
+   symlink could point at an unbounded source. Control files are also
+   opened without following symlinks and without blocking, and only
+   regular files are read.
 3. The verifier requires:
    - `manifest.json` present, parseable, structurally valid (v1, sha256,
      normalized sorted paths), and **identical** to the manifest recomputed

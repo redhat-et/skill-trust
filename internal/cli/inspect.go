@@ -5,7 +5,6 @@ import (
 	"encoding/asn1"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -74,9 +73,13 @@ reads metadata only. Use verify for enforcement.`,
 		// Control-directory inventory: what would ship in .skill-trust/.
 		controlStatus, unexpected := inspectControlDir(dir)
 
-		// Bundle metadata.
+		// Bundle metadata. The bundle is read through the
+		// regular-file-only path: a FIFO or symlink under the reserved
+		// name would otherwise block or grow the read. A non-regular
+		// entry is reported as an absent bundle (the inventory above
+		// flags it), never read.
 		var bi bundleInfo
-		raw, err := os.ReadFile(manifest.ControlPath(dir, manifest.BundleFile))
+		raw, err := manifest.ReadControlFile(dir, manifest.BundleFile)
 		if err != nil {
 			bi.Present = false
 		} else {
