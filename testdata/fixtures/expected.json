@@ -81,6 +81,22 @@
       "expect": { "decision": "block", "code": "ST-METADATA-MISSING" }
     },
     {
+      "name": "add-control-file",
+      "mutation": { "op": "write", "path": ".skill-trust/payload.sh", "content": "#!/bin/sh\n" },
+      "expect": { "decision": "block", "code": "ST-METADATA-UNEXPECTED" }
+    },
+    {
+      "name": "add-control-subdirectory",
+      "mutation": { "op": "mkdir", "path": ".skill-trust/cache" },
+      "expect": { "decision": "block", "code": "ST-METADATA-UNEXPECTED" }
+    },
+    {
+      "name": "add-control-report",
+      "description": "report.json is a reserved (informational) control file and must not block",
+      "mutation": { "op": "write", "path": ".skill-trust/report.json", "content": "{}\n" },
+      "expect": { "decision": "allow", "matchedSigner": "fixtures-key" }
+    },
+    {
       "name": "tamper-embedded-manifest",
       "mutation": { "op": "corrupt-manifest" },
       "expect": { "decision": "block", "code": "ST-CONTENT-MISMATCH" }

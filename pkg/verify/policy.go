@@ -9,11 +9,13 @@
 package verify
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/redhat-et/skill-trust/pkg/trust"
@@ -124,6 +126,50 @@ func (p ProvenanceConstraints) empty() bool {
 	return p == ProvenanceConstraints{}
 }
 
+// SkillBinding scopes a signer rule to specific skills. A signature
+// proves content and signer, not name or location: the manifest records
+// paths relative to the skill root, so a valid skill directory can be
+// renamed or re-hosted without changing its digest. Bindings close that
+// gap at the policy layer: a rule that carries bindings matches only
+// skills that match at least one of them.
+type SkillBinding struct {
+	// Name is the skill directory's base name, as resolved from the
+	// verified path (for example "approved-skill"). Comparison is exact
+	// and case-sensitive.
+	Name string `json:"name,omitempty"`
+
+	// Digest is the skill's manifest digest: 64 lowercase hex
+	// characters, as reported by skill-trust verify and inspect. Pinning
+	// the digest binds the rule to exact content, which also defeats
+	// directory-name swaps between differently-signed skills.
+	Digest string `json:"digest,omitempty"`
+}
+
+// matches reports whether the skill identified by name and digest
+// satisfies every constraint the binding sets. A binding with no
+// constraints is rejected at policy parse time.
+func (b SkillBinding) matches(name, digest string) bool {
+	if b.Name != "" && b.Name != name {
+		return false
+	}
+	if b.Digest != "" && b.Digest != digest {
+		return false
+	}
+	return true
+}
+
+// describe renders the binding for finding messages.
+func (b SkillBinding) describe() string {
+	switch {
+	case b.Name != "" && b.Digest != "":
+		return fmt.Sprintf("name %q digest %s", b.Name, b.Digest)
+	case b.Name != "":
+		return fmt.Sprintf("name %q", b.Name)
+	default:
+		return fmt.Sprintf("digest %s", b.Digest)
+	}
+}
+
 // SignerRule is one allowed signer in a policy.
 type SignerRule struct {
 	Name        string                 `json:"name"`
@@ -131,6 +177,12 @@ type SignerRule struct {
 	Certificate *CertConstraints       `json:"certificate,omitempty"`
 	PublicKey   *PublicKeyRef          `json:"publicKey,omitempty"`
 	Provenance  *ProvenanceConstraints `json:"provenance,omitempty"`
+
+	// Skills optionally binds the rule to specific skills by directory
+	// name and/or manifest digest. An empty list means the rule is not
+	// skill-scoped: it matches any skill whose signature satisfies the
+	// rest of the rule.
+	Skills []SkillBinding `json:"skills,omitempty"`
 
 	// TrustRoot names an entry in Policy.TrustRoots. Empty means the
 	// default trust material for the mode: the embedded public Sigstore
@@ -251,7 +303,51 @@ func (p *Policy) validateRule(r *SignerRule) error {
 			return fmt.Errorf("%w: signer %q references unknown trust root %q", ErrMalformedInput, r.Name, r.TrustRoot)
 		}
 	}
+
+	for i, b := range r.Skills {
+		if err := validateSkillBinding(r.Name, i, b); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// validateSkillBinding checks one skill binding of a signer rule: at
+// least one constraint, a name that is a single path component, and a
+// well-formed manifest digest.
+func validateSkillBinding(ruleName string, index int, b SkillBinding) error {
+	if b.Name == "" && b.Digest == "" {
+		return fmt.Errorf("%w: signer %q skill binding %d sets neither name nor digest; remove it or set at least one", ErrMalformedInput, ruleName, index)
+	}
+	if b.Name != "" {
+		// The binding name is compared against the skill directory's
+		// base name, which never contains a separator and is never "."
+		// or ".." — anything else could never match.
+		if strings.ContainsAny(b.Name, `/\`) || b.Name == "." || b.Name == ".." {
+			return fmt.Errorf("%w: signer %q skill binding %d has name %q; use the skill directory's base name", ErrMalformedInput, ruleName, index, b.Name)
+		}
+	}
+	if b.Digest != "" {
+		if len(b.Digest) != sha256.Size*2 || !isLowerHex(b.Digest) {
+			return fmt.Errorf("%w: signer %q skill binding %d has malformed digest %q (want 64 lowercase hex characters, as printed by skill-trust verify)", ErrMalformedInput, ruleName, index, b.Digest)
+		}
+	}
+	return nil
+}
+
+// isLowerHex reports whether s consists only of lowercase hexadecimal
+// digits, so digests compare exactly against the manifest's lowercase
+// hex encoding.
+func isLowerHex(s string) bool {
+	for _, c := range s {
+		switch {
+		case c >= '0' && c <= '9':
+		case c >= 'a' && c <= 'f':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func (p *Policy) resolveKey(r *SignerRule) ([]byte, error) {

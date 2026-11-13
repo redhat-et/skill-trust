@@ -3,6 +3,7 @@ package verify
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -419,5 +420,190 @@ func TestResultJSON(t *testing.T) {
 func TestVerifierRejectsNilAndEmpty(t *testing.T) {
 	if _, err := New(nil); !errors.Is(err, ErrMalformedInput) {
 		t.Fatalf("err = %v, want ErrMalformedInput", err)
+	}
+}
+
+// ---- Control-directory hygiene ----
+
+func TestVerifyUnexpectedControlEntryBlocks(t *testing.T) {
+	dir := testSkill(t)
+	keyPath, pubPath := keyFiles(t)
+	signWithKey(t, dir, keyPath)
+
+	if err := os.WriteFile(manifest.ControlPath(dir, "payload.sh"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	res := verifyWithPolicy(t, dir, keyPolicyJSON(pubPath, `,"requireTransparencyLog": false`))
+	if res.Allowed() {
+		t.Fatal("skill with unknown control-dir file allowed")
+	}
+	if !hasCode(res, CodeMetadataUnexpected) {
+		t.Errorf("findings = %v, want %s", findingCodes(res), CodeMetadataUnexpected)
+	}
+	if len(res.Signatures) != 0 {
+		t.Errorf("signatures = %+v, want none (verification stops at hygiene)", res.Signatures)
+	}
+}
+
+func TestVerifyUnexpectedControlSubdirBlocks(t *testing.T) {
+	dir := testSkill(t)
+	keyPath, pubPath := keyFiles(t)
+	signWithKey(t, dir, keyPath)
+
+	if err := os.MkdirAll(manifest.ControlPath(dir, "cache"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	res := verifyWithPolicy(t, dir, keyPolicyJSON(pubPath, `,"requireTransparencyLog": false`))
+	if res.Allowed() {
+		t.Fatal("skill with unknown control-dir subdirectory allowed")
+	}
+	if !hasCode(res, CodeMetadataUnexpected) {
+		t.Errorf("findings = %v, want %s", findingCodes(res), CodeMetadataUnexpected)
+	}
+}
+
+func TestVerifyReportControlFileStillAllowed(t *testing.T) {
+	dir := testSkill(t)
+	keyPath, pubPath := keyFiles(t)
+	signWithKey(t, dir, keyPath)
+
+	if err := os.WriteFile(manifest.ControlPath(dir, manifest.ReportFile), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res := verifyWithPolicy(t, dir, keyPolicyJSON(pubPath, `,"requireTransparencyLog": false`))
+	if !res.Allowed() {
+		t.Fatalf("report.json is a reserved control file; decision = %s, findings = %+v", res.Decision, res.Findings)
+	}
+}
+
+// ---- Skill bindings ----
+
+func TestVerifySkillNameBinding(t *testing.T) {
+	dir := testSkill(t)
+	keyPath, pubPath := keyFiles(t)
+	signWithKey(t, dir, keyPath)
+
+	skillName := filepath.Base(dir)
+	bound := keyPolicyJSON(pubPath, fmt.Sprintf(`,"requireTransparencyLog": false,
+      "skills": [{"name": %q}]`, skillName))
+	if res := verifyWithPolicy(t, dir, bound); !res.Allowed() {
+		t.Fatalf("bound name %q: decision = %s, findings = %+v", skillName, res.Decision, res.Findings)
+	}
+
+	foreign := keyPolicyJSON(pubPath, `,"requireTransparencyLog": false,
+      "skills": [{"name": "some-other-skill"}]`)
+	res := verifyWithPolicy(t, dir, foreign)
+	if res.Allowed() {
+		t.Fatal("skill allowed under a foreign name binding")
+	}
+	if !hasCode(res, CodePolicyNoMatch) {
+		t.Errorf("findings = %v, want %s", findingCodes(res), CodePolicyNoMatch)
+	}
+	found := false
+	for _, sr := range res.Signatures {
+		for _, f := range sr.Findings {
+			if f.Code == CodeSkillMismatch {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Errorf("no %s finding in per-rule results: %+v", CodeSkillMismatch, res.Signatures)
+	}
+}
+
+func TestVerifySkillDigestBinding(t *testing.T) {
+	dir := testSkill(t)
+	keyPath, pubPath := keyFiles(t)
+	signWithKey(t, dir, keyPath)
+
+	m, err := manifest.LoadControlManifest(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest, err := m.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bound := keyPolicyJSON(pubPath, fmt.Sprintf(`,"requireTransparencyLog": false,
+      "skills": [{"digest": %q}]`, digest))
+	if res := verifyWithPolicy(t, dir, bound); !res.Allowed() {
+		t.Fatalf("bound digest: decision = %s, findings = %+v", res.Decision, res.Findings)
+	}
+
+	wrongDigest := strings.Repeat("0", 64)
+	foreign := keyPolicyJSON(pubPath, fmt.Sprintf(`,"requireTransparencyLog": false,
+      "skills": [{"digest": %q}]`, wrongDigest))
+	res := verifyWithPolicy(t, dir, foreign)
+	if res.Allowed() {
+		t.Fatal("skill allowed under a foreign digest binding")
+	}
+	found := false
+	for _, sr := range res.Signatures {
+		for _, f := range sr.Findings {
+			if f.Code == CodeSkillMismatch {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Errorf("no %s finding in per-rule results: %+v", CodeSkillMismatch, res.Signatures)
+	}
+}
+
+// TestVerifySkillBindingDefeatsNameSwap reproduces the directory-swap
+// attack: two skills signed by the same key exchange directory names.
+// A rule bound to the expected name and digest must reject the swap.
+func TestVerifySkillBindingDefeatsNameSwap(t *testing.T) {
+	approved := testSkill(t)
+	keyPath, pubPath := keyFiles(t)
+	signWithKey(t, approved, keyPath)
+
+	m, err := manifest.LoadControlManifest(approved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	approvedDigest, err := m.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	approvedName := filepath.Base(approved)
+
+	// A second, differently-signed skill that swaps into the approved
+	// directory name.
+	other := t.TempDir()
+	if err := os.WriteFile(filepath.Join(other, "SKILL.md"), []byte("---\nname: other\n---\nOther.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	signWithKey(t, other, keyPath)
+	swappedName := filepath.Join(filepath.Dir(approved), "swapped-"+approvedName)
+	if err := os.Rename(other, swappedName); err != nil {
+		t.Fatal(err)
+	}
+
+	bound := keyPolicyJSON(pubPath, fmt.Sprintf(`,"requireTransparencyLog": false,
+      "skills": [{"name": %q, "digest": %q}]`, approvedName, approvedDigest))
+
+	if res := verifyWithPolicy(t, approved, bound); !res.Allowed() {
+		t.Fatalf("the bound skill itself must pass: decision = %s, findings = %+v", res.Decision, res.Findings)
+	}
+	res := verifyWithPolicy(t, swappedName, bound)
+	if res.Allowed() {
+		t.Fatal("swapped skill allowed under the approved skill's name binding")
+	}
+	found := false
+	for _, sr := range res.Signatures {
+		for _, f := range sr.Findings {
+			if f.Code == CodeSkillMismatch {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Errorf("no %s finding in per-rule results: %+v", CodeSkillMismatch, res.Signatures)
 	}
 }

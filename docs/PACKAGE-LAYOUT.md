@@ -71,10 +71,14 @@ is not signed content and is not read to make decisions.
 
 1. Only the root `.skill-trust/` is a control directory. A `.skill-trust`
    directory nested under any other path is ordinary signed content.
-2. The verifier reads exactly three names: `manifest.json`,
-   `bundle.sigstore.json`, and (informationally) `report.json`. Other files
-   in the control directory are ignored — they neither extend nor weaken
-   the signed boundary.
+2. The control directory may contain exactly three names:
+   `manifest.json`, `bundle.sigstore.json`, and (informationally)
+   `report.json`, each as a regular file. Anything else — an unknown
+   file name, a subdirectory, or a symlink or special entry under any
+   name — is unexpected contamination: it would ship with the package
+   while being neither signed nor read. Verification blocks with an
+   `ST-METADATA-UNEXPECTED` finding per unexpected entry, and `inspect`
+   lists them.
 3. The verifier requires:
    - `manifest.json` present, parseable, structurally valid (v1, sha256,
      normalized sorted paths), and **identical** to the manifest recomputed
@@ -87,6 +91,8 @@ is not signed content and is not read to make decisions.
    - **malformed** metadata (invalid JSON, wrong media type, unknown bundle
      or manifest version, structural violations such as unsorted or
      duplicate paths, absolute or `..` paths);
+   - **unexpected** metadata (any control-directory entry that is not one
+     of the three reserved regular files described in rule 2);
    - **duplicate** metadata (for example a `manifest.json/` directory
      shadowing the file, or multiple bundle files with the reserved name in
      different cases on case-insensitive filesystems);

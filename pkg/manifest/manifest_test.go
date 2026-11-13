@@ -519,3 +519,93 @@ func TestCompareNilManifests(t *testing.T) {
 		}
 	}
 }
+
+// signedControlFixture returns a skill fixture whose control directory
+// holds exactly the reserved control files.
+func signedControlFixture(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "scripts"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, SkillFile), []byte("---\nname: demo\n---\nDemo.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	control := filepath.Join(dir, ControlDir)
+	if err := os.MkdirAll(control, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range ReservedControlFiles {
+		if err := os.WriteFile(filepath.Join(control, name), []byte("{}\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+func TestUnexpectedControlEntriesClean(t *testing.T) {
+	dir := signedControlFixture(t)
+	unexpected, err := UnexpectedControlEntries(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(unexpected) != 0 {
+		t.Errorf("unexpected = %+v, want none", unexpected)
+	}
+}
+
+func TestUnexpectedControlEntriesReportsUnknownFiles(t *testing.T) {
+	dir := signedControlFixture(t)
+	control := filepath.Join(dir, ControlDir)
+	if err := os.WriteFile(filepath.Join(control, "payload.sh"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(control, "cache"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	unexpected, err := UnexpectedControlEntries(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []ControlEntry{
+		{Name: "cache", Kind: "dir"},
+		{Name: "payload.sh", Kind: "file"},
+	}
+	if !reflect.DeepEqual(unexpected, want) {
+		t.Errorf("unexpected = %+v, want %+v", unexpected, want)
+	}
+}
+
+func TestUnexpectedControlEntriesReportsNonRegularReservedNames(t *testing.T) {
+	dir := signedControlFixture(t)
+	control := filepath.Join(dir, ControlDir)
+
+	// A symlink under a reserved name is not a control file: reading
+	// through it could pull bytes from outside the package.
+	target := filepath.Join(dir, SkillFile)
+	if err := os.Remove(filepath.Join(control, ReportFile)); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(control, ReportFile)); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	unexpected, err := UnexpectedControlEntries(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(unexpected) != 1 || unexpected[0].Name != ReportFile || unexpected[0].Kind != "symlink" {
+		t.Errorf("unexpected = %+v, want [%s symlink]", unexpected, ReportFile)
+	}
+}
+
+func TestUnexpectedControlEntriesMissingDir(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, SkillFile), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := UnexpectedControlEntries(dir); !errors.Is(err, ErrMalformedInput) {
+		t.Errorf("err = %v, want ErrMalformedInput", err)
+	}
+}

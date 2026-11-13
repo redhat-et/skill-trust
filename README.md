@@ -214,9 +214,14 @@ is:
 A valid signature proves that the verified bytes match the signed bytes and
 that the signature satisfies the configured policy. It does not prove that a
 skill is benign, that static instructions are safe, or that a harness cannot
-be misconfigured to bypass verification. Runtime isolation, host permissions,
-secret management, and malware/prompt-injection analysis remain separate
-controls.
+be misconfigured to bypass verification. It also does not bind a skill's
+name or location: the manifest records paths relative to the skill root, so
+a valid skill directory can be renamed or re-hosted in another pipeline
+without changing its digest — pipelines that must accept only particular
+skills pin them with policy [skill
+bindings](docs/POLICY.md#skill-bindings). Runtime isolation, host
+permissions, secret management, and malware/prompt-injection analysis
+remain separate controls.
 
 ## Contributing
 

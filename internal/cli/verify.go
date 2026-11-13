@@ -69,7 +69,10 @@ error. See docs/POLICY.md for the policy schema and finding codes.`,
 				return
 			}
 			b = append(b, '\n')
-			if err := os.WriteFile(reportPath, b, 0o644); err != nil {
+			// Atomic write (temp file + rename): a pre-existing
+			// report.json symlink cannot redirect the report outside
+			// the skill tree, and readers never observe a torn file.
+			if err := manifest.WriteAtomic(reportPath, b, 0o644); err != nil {
 				failf("writing report: %v", err)
 				return
 			}

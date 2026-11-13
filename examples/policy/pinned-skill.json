@@ -1,0 +1,17 @@
+{
+  "apiVersion": "skill-trust.policy/v1",
+  "name": "pinned-skill",
+  "description": "A pinned release key scoped to one exact skill: the directory name AND the manifest digest must both match. This closes the reuse gap - a signature proves content and signer, not name or location, so without bindings a valid skill directory can be renamed, name-swapped with another signed skill, or re-hosted in a pipeline that never approved it. Pin both fields to accept exactly the skill you reviewed.",
+  "trustRoots": {},
+  "signers": [
+    {
+      "name": "release-key",
+      "mode": "key",
+      "publicKey": {"path": "testdata/fixtures/fixtures.pub"},
+      "requireTransparencyLog": false,
+      "skills": [
+        {"name": "valid-complete", "digest": "e65d911b1df917c63b91c64c83d35355193d6f3e70d1c2361e596ae17fbc7b51"}
+      ]
+    }
+  ]
+}

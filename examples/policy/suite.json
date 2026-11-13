@@ -71,6 +71,26 @@
       "fixture": "testdata/fixtures/valid-complete",
       "mutation": {"op": "remove-all", "path": ".skill-trust"},
       "expect": {"decision": "block", "code": "ST-METADATA-MISSING"}
+    },
+    {
+      "name": "pinned-skill-accepts-the-pinned-skill",
+      "policy": "pinned-skill.json",
+      "fixture": "testdata/fixtures/valid-complete",
+      "expect": {"decision": "allow", "matchedSigner": "release-key"}
+    },
+    {
+      "name": "pinned-skill-rejects-renamed-skill",
+      "policy": "pinned-skill.json",
+      "fixture": "testdata/fixtures/valid-complete",
+      "mutation": {"op": "rename-dir", "to": "evil-twin"},
+      "expect": {"decision": "block", "code": "ST-SKILL-MISMATCH"}
+    },
+    {
+      "name": "pinned-skill-rejects-unsigned-skill",
+      "policy": "pinned-skill.json",
+      "fixture": "testdata/fixtures/valid-complete",
+      "mutation": {"op": "remove-all", "path": ".skill-trust"},
+      "expect": {"decision": "block", "code": "ST-METADATA-MISSING"}
     }
   ]
 }

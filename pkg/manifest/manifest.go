@@ -319,6 +319,83 @@ func ControlPath(dir, name string) string {
 	return filepath.Join(dir, ControlDir, name)
 }
 
+// ControlEntry describes one entry found in the root control directory.
+type ControlEntry struct {
+	// Name is the entry's base name inside .skill-trust/.
+	Name string `json:"name"`
+
+	// Kind is the entry's filesystem kind: "file", "dir", "symlink", or
+	// "other". It comes from the directory entry, so symlinks are
+	// reported as symlinks without being followed.
+	Kind string `json:"kind"`
+}
+
+// Entry kinds reported by UnexpectedControlEntries.
+const (
+	controlKindFile    = "file"
+	controlKindDir     = "dir"
+	controlKindSymlink = "symlink"
+	controlKindOther   = "other"
+)
+
+// ReservedControlFiles lists the only names allowed in the root control
+// directory: the two files verification reads plus the informational
+// report. The slice is ordered by role (required, required, optional).
+var ReservedControlFiles = []string{ManifestFile, BundleFile, ReportFile}
+
+// UnexpectedControlEntries enumerates the root control directory of the
+// skill rooted at dir and returns the entries that do not belong there:
+// names other than the reserved control file names, and any entry that is
+// not a regular file (a directory, symlink, or special entry, even under
+// a reserved name). The returned slice is sorted by name; an empty slice
+// means the control directory holds only reserved regular files.
+//
+// Entries under a reserved name that is not a regular file are reported
+// too: a symlink or directory shadowing a control file name is
+// contamination of the package, not a control file.
+//
+// An error is returned only when the control directory cannot be read;
+// callers treat that as unusable metadata and fail closed.
+func UnexpectedControlEntries(dir string) ([]ControlEntry, error) {
+	entries, err := os.ReadDir(filepath.Join(dir, ControlDir))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrMalformedInput, err)
+	}
+
+	reserved := make(map[string]bool, len(ReservedControlFiles))
+	for _, name := range ReservedControlFiles {
+		reserved[name] = true
+	}
+
+	var unexpected []ControlEntry
+	for _, e := range entries {
+		kind := controlKind(e)
+		if reserved[e.Name()] && kind == controlKindFile {
+			continue
+		}
+		unexpected = append(unexpected, ControlEntry{Name: e.Name(), Kind: kind})
+	}
+	sort.Slice(unexpected, func(i, j int) bool {
+		return unexpected[i].Name < unexpected[j].Name
+	})
+	return unexpected, nil
+}
+
+// controlKind classifies a control directory entry without following
+// symlinks.
+func controlKind(e fs.DirEntry) string {
+	switch {
+	case e.Type().IsRegular():
+		return controlKindFile
+	case e.IsDir():
+		return controlKindDir
+	case e.Type()&fs.ModeSymlink != 0:
+		return controlKindSymlink
+	default:
+		return controlKindOther
+	}
+}
+
 // LoadControlManifest reads and parses .skill-trust/manifest.json from the
 // skill rooted at dir. The returned manifest is validated but is not
 // compared against the directory contents; use Compare for that.

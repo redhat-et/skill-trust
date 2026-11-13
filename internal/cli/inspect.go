@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	protobundle "github.com/sigstore/protobuf-specs/gen/pb-go/bundle/v1"
@@ -22,8 +23,10 @@ var inspectCmd = &cobra.Command{
 
 Reports what is stored under .skill-trust/: the embedded manifest (digest
 and file inventory), whether the directory still matches it byte for byte,
-and descriptive signature information (signer identity or key hint,
-certificate validity, transparency log entries, RFC 3161 timestamps).
+every entry in the control directory (flagging anything that is not a
+reserved control file), and descriptive signature information (signer
+identity or key hint, certificate validity, transparency log entries,
+RFC 3161 timestamps).
 
 inspect performs no cryptographic verification and applies no policy; it
 reads metadata only. Use verify for enforcement.`,
@@ -68,6 +71,9 @@ reads metadata only. Use verify for enforcement.`,
 			}
 		}
 
+		// Control-directory inventory: what would ship in .skill-trust/.
+		controlStatus, unexpected := inspectControlDir(dir)
+
 		// Bundle metadata.
 		var bi bundleInfo
 		raw, err := os.ReadFile(manifest.ControlPath(dir, manifest.BundleFile))
@@ -84,13 +90,15 @@ reads metadata only. Use verify for enforcement.`,
 
 		if jsonOutput {
 			out := struct {
-				Manifest        manifest.Manifest     `json:"manifest"`
-				Digest          string                `json:"digest"`
-				ExecutableCount int                   `json:"executableCount"`
-				ObservedDigest  string                `json:"observedDigest,omitempty"`
-				ContentStatus   string                `json:"contentStatus"`
-				Differences     []manifest.Difference `json:"differences,omitempty"`
-				Bundle          *bundleInfo           `json:"bundle"`
+				Manifest        manifest.Manifest       `json:"manifest"`
+				Digest          string                  `json:"digest"`
+				ExecutableCount int                     `json:"executableCount"`
+				ObservedDigest  string                  `json:"observedDigest,omitempty"`
+				ContentStatus   string                  `json:"contentStatus"`
+				Differences     []manifest.Difference   `json:"differences,omitempty"`
+				ControlStatus   string                  `json:"controlStatus"`
+				UnexpectedCtrl  []manifest.ControlEntry `json:"unexpectedControlEntries,omitempty"`
+				Bundle          *bundleInfo             `json:"bundle"`
 			}{
 				Manifest:        *m,
 				Digest:          digest,
@@ -98,6 +106,8 @@ reads metadata only. Use verify for enforcement.`,
 				ObservedDigest:  observedDigest,
 				ContentStatus:   contentStatus,
 				Differences:     diffs,
+				ControlStatus:   controlStatus,
+				UnexpectedCtrl:  unexpected,
 				Bundle:          &bi,
 			}
 			enc := json.NewEncoder(w)
@@ -113,6 +123,10 @@ reads metadata only. Use verify for enforcement.`,
 		fmt.Fprintf(w, "digest:    %s\n", digest)
 		fmt.Fprintf(w, "files:     %d (%d executable)\n", len(m.Entries), executable)
 		fmt.Fprintf(w, "content:   %s\n", contentStatus)
+		fmt.Fprintf(w, "control:   %s\n", controlStatus)
+		for _, u := range unexpected {
+			fmt.Fprintf(w, "  unexpected: %s (%s)\n", u.Name, u.Kind)
+		}
 		for _, d := range diffs {
 			fmt.Fprintf(w, "  diff:    [%s] %s %s\n", d.Kind, d.Path, d.Details)
 		}
@@ -159,6 +173,21 @@ func plural(n int, one, many string) string {
 		return one
 	}
 	return many
+}
+
+// inspectControlDir summarizes the control directory: a human-readable
+// status line and the unexpected entries, if any. inspect is
+// informational, so an unreadable control directory is reported, never
+// fatal.
+func inspectControlDir(dir string) (string, []manifest.ControlEntry) {
+	unexpected, err := manifest.UnexpectedControlEntries(dir)
+	if err != nil {
+		return fmt.Sprintf("cannot read: %v", err), nil
+	}
+	if len(unexpected) == 0 {
+		return fmt.Sprintf("only reserved files (%s)", strings.Join(manifest.ReservedControlFiles, ", ")), nil
+	}
+	return fmt.Sprintf("%d unexpected %s", len(unexpected), plural(len(unexpected), "entry", "entries")), unexpected
 }
 
 // bundleInfo is the descriptive metadata inspect reports.

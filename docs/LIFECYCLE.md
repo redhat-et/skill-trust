@@ -49,6 +49,8 @@ and the organization changes what it is willing to run.
 | Identity or issuer claims do not satisfy the rule | block | `ST-SIGNATURE-INVALID` |
 | Content changed after signing | block | `ST-CONTENT-MISMATCH` |
 | No control files at all | block | `ST-METADATA-MISSING` |
+| Control directory carries unexpected entries | block | `ST-METADATA-UNEXPECTED` |
+| Skill does not satisfy the rule's skill bindings | block | `ST-SKILL-MISMATCH` |
 
 Each of these is exercised by committed fixtures:
 [`testdata/fixtures/expected.json`](../testdata/fixtures/expected.json)
