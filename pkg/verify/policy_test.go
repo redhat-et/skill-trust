@@ -288,3 +288,76 @@ func TestPolicyRejectsNegativeDuration(t *testing.T) {
 		}
 	}
 }
+
+func TestParsePolicySkillBindings(t *testing.T) {
+	_, pubPath := keyFiles(t)
+	doc := `{
+  "apiVersion": "skill-trust.policy/v1",
+  "signers": [{
+    "name": "release-key",
+    "mode": "key",
+    "publicKey": {"path": "` + pubPath + `"},
+    "requireTransparencyLog": false,
+    "skills": [
+      {"name": "approved-skill"},
+      {"digest": "` + strings.Repeat("a", 64) + `"},
+      {"name": "pinned", "digest": "` + strings.Repeat("b", 64) + `"}
+    ]
+  }]
+}`
+	p, err := ParsePolicy([]byte(doc))
+	if err != nil {
+		t.Fatalf("ParsePolicy: %v", err)
+	}
+	bindings := p.Signers[0].Skills
+	if len(bindings) != 3 {
+		t.Fatalf("skills = %+v, want 3 bindings", bindings)
+	}
+	if bindings[0].Name != "approved-skill" || bindings[0].Digest != "" {
+		t.Errorf("binding 0 = %+v", bindings[0])
+	}
+	if bindings[1].Name != "" || len(bindings[1].Digest) != 64 {
+		t.Errorf("binding 1 = %+v", bindings[1])
+	}
+	if bindings[2].Name != "pinned" || bindings[2].Digest != strings.Repeat("b", 64) {
+		t.Errorf("binding 2 = %+v", bindings[2])
+	}
+}
+
+func TestParsePolicySkillBindingValidation(t *testing.T) {
+	_, pubPath := keyFiles(t)
+	base := func(skills string) string {
+		return `{
+  "apiVersion": "skill-trust.policy/v1",
+  "signers": [{
+    "name": "release-key",
+    "mode": "key",
+    "publicKey": {"path": "` + pubPath + `"},
+    "requireTransparencyLog": false,
+    "skills": [` + skills + `]
+  }]
+}`
+	}
+	cases := []struct {
+		name   string
+		skills string
+	}{
+		{"empty binding", `{}`},
+		{"path in name", `{"name": "skills/approved"}`},
+		{"relative name", `{"name": ".."}`},
+		{"dot name", `{"name": "."}`},
+		{"backslash in name", `{"name": "approved\\skill"}`},
+		{"short digest", `{"digest": "abc123"}`},
+		{"uppercase digest", `{"digest": "` + strings.ToUpper(strings.Repeat("a", 64)) + `"}`},
+		{"non-hex digest", `{"digest": "` + strings.Repeat("z", 64) + `"}`},
+	}
+	for _, tc := range cases {
+		_, err := ParsePolicy([]byte(base(tc.skills)))
+		if err == nil {
+			t.Errorf("%s: ParsePolicy accepted invalid binding %s", tc.name, tc.skills)
+		}
+		if !errors.Is(err, ErrMalformedInput) {
+			t.Errorf("%s: err = %v, want ErrMalformedInput", tc.name, err)
+		}
+	}
+}

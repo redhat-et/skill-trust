@@ -329,3 +329,106 @@ func TestInspectJSON(t *testing.T) {
 		t.Errorf("unexpected inspect JSON:\n%s", out)
 	}
 }
+
+func TestVerifyUnexpectedControlFileBlocks(t *testing.T) {
+	dir, policy := signedSkill(t)
+	if err := os.WriteFile(filepath.Join(dir, ".skill-trust", "payload.sh"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	code, out := runCLI(t, "verify", dir, "--policy", policy)
+	if code != ExitBlocked {
+		t.Fatalf("exit = %d, want %d, output:\n%s", code, ExitBlocked, out)
+	}
+	if !strings.Contains(out, "BLOCK") || !strings.Contains(out, "ST-METADATA-UNEXPECTED") {
+		t.Errorf("unexpected verify output:\n%s", out)
+	}
+}
+
+func TestVerifyReportFileIsReserved(t *testing.T) {
+	dir, policy := signedSkill(t)
+	// Writing the report must not break a subsequent verification: the
+	// report is a reserved control file, not contamination.
+	code, out := runCLI(t, "verify", dir, "--policy", policy, "--report")
+	if code != ExitSuccess {
+		t.Fatalf("verify --report exit = %d, output:\n%s", code, out)
+	}
+	code, out = runCLI(t, "verify", dir, "--policy", policy)
+	if code != ExitSuccess {
+		t.Fatalf("re-verify after report exit = %d, output:\n%s", code, out)
+	}
+}
+
+func TestVerifySkillNameBinding(t *testing.T) {
+	dir := newSkill(t)
+	keyPath, pubPath := newKey(t)
+	if code, out := runCLI(t, "sign", dir, "--key", keyPath); code != ExitSuccess {
+		t.Fatalf("sign exit = %d, output:\n%s", code, out)
+	}
+
+	skillName := filepath.Base(dir)
+	bound := boundKeyPolicy(t, pubPath, skillName)
+	code, out := runCLI(t, "verify", dir, "--policy", bound)
+	if code != ExitSuccess {
+		t.Fatalf("bound name %q: exit = %d, output:\n%s", skillName, code, out)
+	}
+
+	foreign := boundKeyPolicy(t, pubPath, "some-other-skill")
+	code, out = runCLI(t, "verify", dir, "--policy", foreign)
+	if code != ExitBlocked {
+		t.Fatalf("foreign binding: exit = %d, want %d, output:\n%s", code, ExitBlocked, out)
+	}
+	if !strings.Contains(out, "ST-SKILL-MISMATCH") {
+		t.Errorf("unexpected verify output:\n%s", out)
+	}
+}
+
+// boundKeyPolicy writes a key-based policy whose signer is bound to the
+// named skill.
+func boundKeyPolicy(t *testing.T, pubPath, skillName string) string {
+	t.Helper()
+	doc := `{
+  "apiVersion": "skill-trust.policy/v1",
+  "signers": [{
+    "name": "release-key",
+    "mode": "key",
+    "publicKey": {"path": "` + pubPath + `"},
+    "requireTransparencyLog": false,
+    "skills": [{"name": "` + skillName + `"}]
+  }]
+}`
+	path := filepath.Join(t.TempDir(), "policy.json")
+	if err := os.WriteFile(path, []byte(doc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestInspectReportsUnexpectedControlEntries(t *testing.T) {
+	dir, _ := signedSkill(t)
+	if err := os.WriteFile(filepath.Join(dir, ".skill-trust", "payload.sh"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	code, out := runCLI(t, "inspect", dir)
+	if code != ExitSuccess {
+		t.Fatalf("exit = %d, output:\n%s", code, out)
+	}
+	if !strings.Contains(out, "unexpected") || !strings.Contains(out, "payload.sh") {
+		t.Errorf("unexpected control entry not reported:\n%s", out)
+	}
+
+	code, out = runCLI(t, "inspect", dir, "--json")
+	if code != ExitSuccess {
+		t.Fatalf("json exit = %d, output:\n%s", code, out)
+	}
+	var doc struct {
+		ControlStatus          string              `json:"controlStatus"`
+		UnexpectedControlFiles []map[string]string `json:"unexpectedControlEntries"`
+	}
+	if err := json.Unmarshal([]byte(out), &doc); err != nil {
+		t.Fatalf("output is not JSON: %v\n%s", err, out)
+	}
+	if doc.ControlStatus == "" || len(doc.UnexpectedControlFiles) != 1 || doc.UnexpectedControlFiles[0]["name"] != "payload.sh" {
+		t.Errorf("unexpected inspect JSON:\n%s", out)
+	}
+}

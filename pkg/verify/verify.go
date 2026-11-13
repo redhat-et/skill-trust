@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -32,12 +33,14 @@ const (
 	CodeContentInvalid      = "ST-CONTENT-INVALID"
 	CodeMetadataMissing     = "ST-METADATA-MISSING"
 	CodeMetadataMalformed   = "ST-METADATA-MALFORMED"
+	CodeMetadataUnexpected  = "ST-METADATA-UNEXPECTED"
 	CodeSignatureInvalid    = "ST-SIGNATURE-INVALID"
 	CodeEvidenceTlogMissing = "ST-EVIDENCE-TLOG-MISSING"
 	CodeEvidenceTsaMissing  = "ST-EVIDENCE-TSA-MISSING"
 	CodeEvidenceStale       = "ST-EVIDENCE-STALE"
 	CodeTrustUnavailable    = "ST-TRUST-UNAVAILABLE"
 	CodeProvenanceMismatch  = "ST-PROVENANCE-MISMATCH"
+	CodeSkillMismatch       = "ST-SKILL-MISMATCH"
 )
 
 // Finding is one machine- and human-readable verification finding.
@@ -289,7 +292,31 @@ func (v *Verifier) VerifySkill(dir string) (Result, error) {
 		return res, nil
 	}
 
-	// 4. Signature bundle (control file).
+	// 4. Control-directory hygiene. Everything in .skill-trust/ ships
+	// with the package but is excluded from the signed boundary, so an
+	// unknown entry would travel through distribution without being
+	// signed or flagged. Only the reserved control files may be present;
+	// anything else blocks fail-closed.
+	unexpected, err := manifest.UnexpectedControlEntries(dir)
+	if err != nil {
+		res.Findings = append(res.Findings, Finding{
+			Code:    CodeMetadataMalformed,
+			Message: fmt.Sprintf("reading control directory: %v", err),
+		})
+		return res, nil
+	}
+	for _, u := range unexpected {
+		res.Findings = append(res.Findings, Finding{
+			Code: CodeMetadataUnexpected,
+			Message: fmt.Sprintf("%q (%s) in %s is not a reserved control file; only %s, %s, and %s may ship in the control directory",
+				u.Name, u.Kind, manifest.ControlDir, manifest.ManifestFile, manifest.BundleFile, manifest.ReportFile),
+		})
+	}
+	if len(unexpected) > 0 {
+		return res, nil
+	}
+
+	// 5. Signature bundle (control file).
 	raw, err := os.ReadFile(manifest.ControlPath(dir, manifest.BundleFile))
 	if err != nil {
 		res.Findings = append(res.Findings, Finding{
@@ -326,10 +353,23 @@ func (v *Verifier) VerifySkill(dir string) (Result, error) {
 		return res, nil
 	}
 
-	// 5. Evaluate every signer rule; one full match allows.
+	// The skill's identity for skill bindings: the directory's base name
+	// and the signed content digest. The name is not signed (the
+	// manifest records relative paths only); policies that must accept
+	// only particular skills bind them explicitly.
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		return res, fmt.Errorf("%w: resolving %q: %v", ErrMalformedInput, dir, err)
+	}
+	skill := skillRef{
+		name:   filepath.Base(filepath.Clean(absDir)),
+		digest: expectedDigest,
+	}
+
+	// 6. Evaluate every signer rule; one full match allows.
 	matched := false
 	for _, cr := range v.rules {
-		sr := v.evaluateRule(cr, &pb, sb, canonical)
+		sr := v.evaluateRule(cr, &pb, sb, canonical, skill)
 		res.Signatures = append(res.Signatures, sr)
 		if sr.Matched {
 			matched = true
@@ -353,8 +393,15 @@ func (v *Verifier) VerifySkill(dir string) (Result, error) {
 	return res, nil
 }
 
+// skillRef identifies the skill under verification for skill bindings:
+// the directory's base name and the signed manifest digest.
+type skillRef struct {
+	name   string
+	digest string
+}
+
 // evaluateRule runs one signer rule against the bundle.
-func (v *Verifier) evaluateRule(cr compiledRule, pb *protobundle.Bundle, sb *sgbundle.Bundle, canonical []byte) SignatureResult {
+func (v *Verifier) evaluateRule(cr compiledRule, pb *protobundle.Bundle, sb *sgbundle.Bundle, canonical []byte, skill skillRef) SignatureResult {
 	sr := SignatureResult{Rule: cr.rule.Name, Mode: cr.rule.Mode}
 
 	// Descriptive fields from the bundle.
@@ -427,9 +474,40 @@ func (v *Verifier) evaluateRule(cr compiledRule, pb *protobundle.Bundle, sb *sgb
 		}
 	}
 
+	// Skill bindings: optional per-rule scoping to particular skills.
+	// Evaluated last so that, when everything else matches, a binding
+	// mismatch is the reported reason the rule failed.
+	if len(cr.rule.Skills) > 0 {
+		if f := checkSkillBindings(cr.rule.Skills, skill); f != nil {
+			return fail(f.Code, f.Message)
+		}
+	}
+
 	// Every check passed: the rule matches.
 	sr.Matched = true
 	return sr
+}
+
+// checkSkillBindings matches the verified skill against a rule's skill
+// bindings. A binding matches when every constraint it sets matches:
+// name against the skill directory's base name, digest against the
+// manifest digest. The rule matches when at least one binding does.
+// Returns nil on match, otherwise a finding explaining the mismatch.
+func checkSkillBindings(bindings []SkillBinding, skill skillRef) *Finding {
+	for _, b := range bindings {
+		if b.matches(skill.name, skill.digest) {
+			return nil
+		}
+	}
+	wanted := make([]string, 0, len(bindings))
+	for _, b := range bindings {
+		wanted = append(wanted, b.describe())
+	}
+	return &Finding{
+		Code: CodeSkillMismatch,
+		Message: fmt.Sprintf("skill directory %q (digest %s) matches no skill binding: %s",
+			skill.name, skill.digest, strings.Join(wanted, ", ")),
+	}
 }
 
 // PreflightVerifier returns the verifier as a preflight.Verifier for

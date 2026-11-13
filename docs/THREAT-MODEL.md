@@ -53,6 +53,13 @@ establishes nothing about authorization.
   control.
 - It does not perform **malware or static analysis** of skill scripts.
 - It does not protect a harness that **bypasses the verifier**.
+- It does not bind the skill's **name or location**. The manifest records
+  paths relative to the skill root, so a valid skill directory can be
+  renamed, re-hosted under another name, or reused in another pipeline
+  without changing its digest, and it verifies anywhere its signer is
+  trusted. Where that matters, pin the accepted skills in the policy with
+  [skill bindings](POLICY.md#skill-bindings) (directory name and/or
+  manifest digest).
 
 These are real security requirements. They are addressed by controls that
 compose with `skill-trust` (sandboxing, tool permission systems, secret
@@ -93,6 +100,11 @@ The attacker may:
 
 - modify, add, delete, or rename files in a skill directory after signing;
 - modify, remove, or forge `.skill-trust/` control files;
+- drop unknown files into `.skill-trust/` so they ship with the package
+  without being signed;
+- rename a valid signed skill directory, swap directory names between
+  signed skills, or re-host a valid skill in a context that never approved
+  it;
 - replay an old, valid signature over new content (digest substitution);
 - present a valid signature made by an *unrelated* signer;
 - tamper with the manifest digest embedded in a bundle;
@@ -127,6 +139,8 @@ The attacker is assumed **not** to:
 | T12 | Prompt injection in signed instructions | Out of scope; needs runtime isolation and permission controls | Explicitly accepted |
 | T13 | Verifier misconfiguration (e.g., trust-everything policy) | Policy format supports only explicit allow lists; missing evidence blocks by default; documented fail-closed defaults | Operator error remains possible |
 | T14 | Compromised trust root | Out of scope; handled by rotation and re-signing procedures | Explicitly accepted |
+| T15 | Unknown files dropped into `.skill-trust/` to ship unsigned content with the package | Control-directory enumeration at verification: only the three reserved regular files may be present; anything else blocks (`ST-METADATA-UNEXPECTED`) and `inspect` lists it | None within format |
+| T16 | Valid signed skill renamed, name-swapped with another signed skill, or reused in a pipeline that never approved it | Optional policy [skill bindings](POLICY.md#skill-bindings) pin accepted directory names and/or manifest digests per signer rule; mismatch blocks (`ST-SKILL-MISMATCH`). Pinning name and digest together defeats swaps | Policies without bindings authorize by signer, not by skill — the default for org-wide release signers |
 
 ## Enforcement boundary and fail-closed
 

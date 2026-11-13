@@ -46,6 +46,12 @@ Rules:
 6. **Directories are implicit.** They are represented only through the
    paths of the files they contain.
 
+The skill directory's own name is not part of the manifest: entry paths
+are relative to the skill root, so a directory can be renamed without
+changing its digest. Verification is content-and-signer scoped; policies
+that must accept only particular skills pin them with [skill
+bindings](POLICY.md#skill-bindings) instead.
+
 ## Manifest format
 
 The manifest is a JSON object:

@@ -1,6 +1,6 @@
 # Organization policy examples
 
-Four worked policies for common enterprise cases. Every example has a
+Five worked policies for common enterprise cases. Every example has a
 machine-checked passing **and** failing fixture
 ([`suite.json`](suite.json), run by `pkg/verify` in CI), so these cannot
 drift from actual behavior. Policy syntax is documented in
@@ -13,6 +13,7 @@ in [docs/LIFECYCLE.md](../../docs/LIFECYCLE.md).
 | [`github-repository.json`](github-repository.json) | Any workflow of one repository on `refs/heads/main`, through RHTAS | Skills are produced by many workflows of one repo |
 | [`offline-key.json`](offline-key.json) | A pinned public key; no log, timestamp, or network use at verify time | Air-gapped or registry-free verification |
 | [`mixed-trust.json`](mixed-trust.json) | Both of the above anchors | Signer rotation: old and new signatures verify during the transition |
+| [`pinned-skill.json`](pinned-skill.json) | A pinned public key **and** one exact skill (directory name + manifest digest) | A pipeline must accept exactly one reviewed skill: blocks renames, name swaps, and re-hosting |
 
 Unsigned and unknown skills fail closed under **every** policy — the
 unsigned cases in `suite.json` demonstrate the defined result
@@ -44,6 +45,8 @@ run from the repository root. To adapt an example, replace:
 [`testdata/fixtures/`](../../testdata/fixtures/) with expected results,
 including the failing cases: wrong signature type
 (`ST-POLICY-NO-MATCH`), tampered content (`ST-CONTENT-MISMATCH`), and
-unsigned skills (`ST-METADATA-MISSING`). The test additionally asserts
+unsigned skills (`ST-METADATA-MISSING`). The pinned-skill cases also
+cover the reuse defenses: a renamed skill directory blocks with
+`ST-SKILL-MISMATCH`. The test additionally asserts
 every policy file in this directory has at least one passing and one
 failing case, so adding a new example requires adding its fixtures.

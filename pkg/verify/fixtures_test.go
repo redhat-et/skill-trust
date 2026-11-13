@@ -63,10 +63,12 @@ func loadFixtureSuite(t *testing.T) fixtureSuite {
 }
 
 // copyFixture copies the committed fixture (control files included) into a
-// temporary directory, preserving modes.
+// temporary directory, preserving modes and the fixture's own directory
+// name (skill names are what policies bind to, so a copied skill keeps
+// its identity).
 func copyFixture(t *testing.T, src string) string {
 	t.Helper()
-	dst := t.TempDir()
+	dst := filepath.Join(t.TempDir(), filepath.Base(src))
 	err := filepath.WalkDir(src, func(p string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -98,14 +100,16 @@ func copyFixture(t *testing.T, src string) string {
 	return dst
 }
 
-// applyMutation mutates a copied fixture. The mutation vocabulary mirrors
-// the tamper classes the manifest spec calls out: content changes, added,
-// deleted, and renamed files, executable-bit flips, control-file removal,
-// and an embedded-manifest forgery.
-func applyMutation(t *testing.T, dir string, m *fixtureMutation) {
+// applyMutation mutates a copied fixture and returns the skill directory's
+// path (unchanged except by the rename-dir op, which moves it). The
+// mutation vocabulary mirrors the tamper classes the manifest spec calls
+// out: content changes, added, deleted, and renamed files,
+// executable-bit flips, control-file removal, an embedded-manifest
+// forgery, and renaming the skill directory itself.
+func applyMutation(t *testing.T, dir string, m *fixtureMutation) string {
 	t.Helper()
 	if m == nil {
-		return
+		return dir
 	}
 	join := func(rel string) string { return filepath.Join(dir, filepath.FromSlash(rel)) }
 	switch m.Op {
@@ -125,9 +129,21 @@ func applyMutation(t *testing.T, dir string, m *fixtureMutation) {
 		if err := os.Rename(join(m.Path), join(m.To)); err != nil {
 			t.Fatalf("rename %s -> %s: %v", m.Path, m.To, err)
 		}
+	case "rename-dir":
+		// Renames the skill directory itself: the rename or re-hosting
+		// attack a name or digest binding defends against.
+		moved := filepath.Join(filepath.Dir(dir), filepath.FromSlash(m.To))
+		if err := os.Rename(dir, moved); err != nil {
+			t.Fatalf("rename-dir -> %s: %v", m.To, err)
+		}
+		dir = moved
 	case "chmod":
 		if err := os.Chmod(join(m.Path), os.FileMode(m.Mode)); err != nil {
 			t.Fatalf("chmod %s: %v", m.Path, err)
+		}
+	case "mkdir":
+		if err := os.MkdirAll(join(m.Path), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", m.Path, err)
 		}
 	case "corrupt-manifest":
 		// Rewrite the embedded manifest with one altered entry digest: a
@@ -162,6 +178,7 @@ func applyMutation(t *testing.T, dir string, m *fixtureMutation) {
 	default:
 		t.Fatalf("unknown mutation op %q", m.Op)
 	}
+	return dir
 }
 
 // loadFixturePolicy loads a committed fixture policy, rewriting relative
@@ -251,7 +268,7 @@ func TestSignedFixtureSuite(t *testing.T) {
 	for _, tc := range suite.Cases {
 		t.Run(tc.Name, func(t *testing.T) {
 			dir := copyFixture(t, fixtureDir)
-			applyMutation(t, dir, tc.Mutation)
+			dir = applyMutation(t, dir, tc.Mutation)
 
 			result, err := verifier.VerifySkill(dir)
 			if err != nil {
@@ -370,7 +387,7 @@ func TestCrossRootFixtureSuite(t *testing.T) {
 			}
 
 			dir := copyFixture(t, fixtureDir)
-			applyMutation(t, dir, tc.Mutation)
+			dir = applyMutation(t, dir, tc.Mutation)
 
 			result, err := verifier.VerifySkill(dir)
 			if err != nil {
@@ -474,7 +491,7 @@ func TestExamplePolicySuite(t *testing.T) {
 			}
 
 			dir := copyFixture(t, filepath.Join(repoRoot, filepath.FromSlash(tc.Fixture)))
-			applyMutation(t, dir, tc.Mutation)
+			dir = applyMutation(t, dir, tc.Mutation)
 
 			result, err := verifier.VerifySkill(dir)
 			if err != nil {

@@ -131,6 +131,49 @@ Constraints are compared for equality. A certificate that lacks a constrained
 claim fails the rule. Key-based signatures cannot satisfy provenance
 constraints (there is no certificate); rules that combine both block.
 
+### Skill bindings
+
+Both modes may add optional skill bindings that scope the rule to
+particular skills:
+
+- `skills[].name` — the skill directory's base name (for example
+  `approved-skill`), compared exactly and case-sensitively.
+- `skills[].digest` — the skill's manifest digest (64 lowercase hex
+  characters, as printed by `skill-trust verify` and `inspect`), pinning
+  the rule to exact content.
+
+A binding matches when every constraint it sets matches; a rule matches
+when at least one of its bindings matches. A binding that sets neither
+field is rejected at policy load, as is a name that is not a single path
+component or a malformed digest.
+
+Bindings exist because a signature proves content and signer, not name or
+location: the manifest records paths relative to the skill root, so a
+valid skill directory can be renamed or re-hosted without changing its
+digest, and the same signed skill verifies anywhere the signer is trusted
+(see the threat model, "What a signature does not prove"). A pipeline that
+must accept only particular skills — only `approved-skill`, or only the
+exact bytes it reviewed — pins them with bindings. Pinning both name and
+digest also defeats directory-name swaps between differently-signed
+skills.
+
+```json
+{
+  "name": "release-key",
+  "mode": "key",
+  "publicKey": { "path": "trust/release.pub" },
+  "requireTransparencyLog": false,
+  "skills": [
+    { "name": "approved-skill", "digest": "5d76574839a27cd25dd0c3e9dce8db58ae2f5c2938b0542314da150d34624627" },
+    { "name": "another-skill" }
+  ]
+}
+```
+
+A rule with no `skills` list is not skill-scoped: it matches any skill
+whose signature satisfies the rest of the rule, which is the right
+default for organization-wide release signers.
+
 ### Evidence requirements
 
 Per-signer evidence knobs:
@@ -174,9 +217,13 @@ Failure semantics (all block, none warn-only):
 - policy is malformed, references an unknown trust root, or a signer rule is
   contradictory (for example both `identities` and `identityRegexp`);
 - the embedded manifest or bundle is missing, malformed, or duplicated;
+- the control directory contains entries other than the reserved control
+  files;
 - the recomputed manifest does not match the embedded manifest;
 - no signature verifies cryptographically;
 - no *valid* signature matches any signer rule;
+- the skill does not satisfy the matched rule's skill bindings (name or
+  digest pinning);
 - required evidence (transparency log, timestamp) is missing or unverifiable;
 - trust material is unavailable or untrusted.
 
@@ -203,12 +250,14 @@ Machine-readable finding codes (stable, prefixed `ST-`):
 - `ST-CONTENT-MISMATCH` — recomputed manifest differs from embedded manifest
 - `ST-CONTENT-INVALID` — skill directory violates package rules (missing `SKILL.md`, symlink, special file)
 - `ST-METADATA-MISSING` / `ST-METADATA-MALFORMED` — control files absent or unparseable
+- `ST-METADATA-UNEXPECTED` — the control directory contains entries other than the reserved control files
 - `ST-SIGNATURE-INVALID` — cryptographic verification failed
 - `ST-EVIDENCE-TLOG-MISSING` / `ST-EVIDENCE-TLOG-INVALID` — transparency evidence absent or failed
 - `ST-EVIDENCE-TSA-MISSING` / `ST-EVIDENCE-TSA-INVALID` — timestamp evidence absent or failed
 - `ST-EVIDENCE-STALE` — signature older than `maxSignatureAge`
 - `ST-TRUST-UNAVAILABLE` — trust material missing or untrusted
 - `ST-PROVENANCE-MISMATCH` — certificate claims did not satisfy provenance constraints
+- `ST-SKILL-MISMATCH` — the skill did not satisfy the signer rule's skill bindings
 
 ## Separation of concerns
 
