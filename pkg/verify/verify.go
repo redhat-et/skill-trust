@@ -5,7 +5,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"os"
+	"io/fs"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -239,7 +239,45 @@ func (v *Verifier) loadTrustMaterial(r *SignerRule) (sgroot.TrustedMaterial, err
 func (v *Verifier) VerifySkill(dir string) (Result, error) {
 	res := NewResult()
 
-	// 1. Embedded manifest (control file).
+	// 1. Control-directory hygiene, before any control file is read.
+	// Everything in .skill-trust/ ships with the package but is
+	// excluded from the signed boundary, so an unknown entry would
+	// travel through distribution without being signed or flagged.
+	// The inventory also runs first so that a crafted package cannot
+	// hang or exhaust the reader before the check: a FIFO named
+	// manifest.json would block a plain read until a writer appears,
+	// and a symlink to an unbounded source would grow it without end.
+	// Only the reserved control files may be present; anything else
+	// blocks fail-closed.
+	unexpected, err := manifest.UnexpectedControlEntries(dir)
+	if err != nil {
+		code := CodeMetadataMalformed
+		message := fmt.Sprintf("reading control directory: %v", err)
+		if errors.Is(err, fs.ErrNotExist) {
+			// No control directory at all: an unsigned skill, the
+			// same missing-metadata result as before the inventory
+			// existed.
+			code = CodeMetadataMissing
+			message = fmt.Sprintf("control directory: %v", err)
+		}
+		res.Findings = append(res.Findings, Finding{
+			Code:    code,
+			Message: message,
+		})
+		return res, nil
+	}
+	for _, u := range unexpected {
+		res.Findings = append(res.Findings, Finding{
+			Code: CodeMetadataUnexpected,
+			Message: fmt.Sprintf("%q (%s) in %s is not a reserved control file; only %s, %s, and %s may ship in the control directory",
+				u.Name, u.Kind, manifest.ControlDir, manifest.ManifestFile, manifest.BundleFile, manifest.ReportFile),
+		})
+	}
+	if len(unexpected) > 0 {
+		return res, nil
+	}
+
+	// 2. Embedded manifest (control file).
 	embedded, err := manifest.LoadControlManifest(dir)
 	if err != nil {
 		res.Findings = append(res.Findings, Finding{
@@ -258,7 +296,7 @@ func (v *Verifier) VerifySkill(dir string) (Result, error) {
 	}
 	res.ManifestDigest = expectedDigest
 
-	// 2. Recompute the manifest from the directory.
+	// 3. Recompute the manifest from the directory.
 	observed, err := manifest.Create(dir)
 	if err != nil {
 		code := CodeContentInvalid
@@ -281,7 +319,7 @@ func (v *Verifier) VerifySkill(dir string) (Result, error) {
 	}
 	res.ObservedDigest = observedDigest
 
-	// 3. Content comparison.
+	// 4. Content comparison.
 	if diffs := manifest.Compare(embedded, observed); len(diffs) > 0 {
 		for _, d := range diffs {
 			res.Findings = append(res.Findings, Finding{
@@ -292,32 +330,9 @@ func (v *Verifier) VerifySkill(dir string) (Result, error) {
 		return res, nil
 	}
 
-	// 4. Control-directory hygiene. Everything in .skill-trust/ ships
-	// with the package but is excluded from the signed boundary, so an
-	// unknown entry would travel through distribution without being
-	// signed or flagged. Only the reserved control files may be present;
-	// anything else blocks fail-closed.
-	unexpected, err := manifest.UnexpectedControlEntries(dir)
-	if err != nil {
-		res.Findings = append(res.Findings, Finding{
-			Code:    CodeMetadataMalformed,
-			Message: fmt.Sprintf("reading control directory: %v", err),
-		})
-		return res, nil
-	}
-	for _, u := range unexpected {
-		res.Findings = append(res.Findings, Finding{
-			Code: CodeMetadataUnexpected,
-			Message: fmt.Sprintf("%q (%s) in %s is not a reserved control file; only %s, %s, and %s may ship in the control directory",
-				u.Name, u.Kind, manifest.ControlDir, manifest.ManifestFile, manifest.BundleFile, manifest.ReportFile),
-		})
-	}
-	if len(unexpected) > 0 {
-		return res, nil
-	}
-
-	// 5. Signature bundle (control file).
-	raw, err := os.ReadFile(manifest.ControlPath(dir, manifest.BundleFile))
+	// 5. Signature bundle (control file), read through the same
+	// regular-file-only path as the manifest.
+	raw, err := manifest.ReadControlFile(dir, manifest.BundleFile)
 	if err != nil {
 		res.Findings = append(res.Findings, Finding{
 			Code:    CodeMetadataMissing,

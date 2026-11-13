@@ -479,6 +479,120 @@ func TestVerifyReportControlFileStillAllowed(t *testing.T) {
 	}
 }
 
+// TestVerifyFIFOControlFileBlocksFast pins the availability property the
+// control-directory inventory guarantees: a FIFO named manifest.json would
+// block a plain read until a writer appears, so the inventory must run
+// before any control file is read and block the skill instead. The test
+// finishing at all proves verify did not hang.
+func TestVerifyFIFOControlFileBlocksFast(t *testing.T) {
+	dir := testSkill(t)
+	keyPath, pubPath := keyFiles(t)
+	signWithKey(t, dir, keyPath)
+
+	manifestPath := manifest.ControlPath(dir, manifest.ManifestFile)
+	if err := os.Remove(manifestPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := mkfifo(manifestPath); err != nil {
+		t.Skipf("fifo unavailable: %v", err)
+	}
+
+	res := verifyWithPolicy(t, dir, keyPolicyJSON(pubPath, `,"requireTransparencyLog": false`))
+	if res.Allowed() {
+		t.Fatal("skill with FIFO control file allowed")
+	}
+	if !hasCode(res, CodeMetadataUnexpected) {
+		t.Errorf("findings = %v, want %s", findingCodes(res), CodeMetadataUnexpected)
+	}
+	if len(res.Signatures) != 0 {
+		t.Errorf("signatures = %+v, want none (verification stops at hygiene)", res.Signatures)
+	}
+}
+
+// TestVerifySymlinkedControlFileNotRead points manifest.json at a perfectly
+// valid copy stored outside the control directory. Following the symlink
+// would load a manifest whose digest matches the content, so the skill would
+// verify; the inventory must refuse the read instead.
+func TestVerifySymlinkedControlFileNotRead(t *testing.T) {
+	dir := testSkill(t)
+	keyPath, pubPath := keyFiles(t)
+	signWithKey(t, dir, keyPath)
+
+	manifestPath := manifest.ControlPath(dir, manifest.ManifestFile)
+	raw, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(t.TempDir(), "swapped-manifest.json")
+	if err := os.WriteFile(target, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(manifestPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, manifestPath); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	res := verifyWithPolicy(t, dir, keyPolicyJSON(pubPath, `,"requireTransparencyLog": false`))
+	if res.Allowed() {
+		t.Fatal("skill with symlinked control file allowed")
+	}
+	if !hasCode(res, CodeMetadataUnexpected) {
+		t.Errorf("findings = %v, want %s", findingCodes(res), CodeMetadataUnexpected)
+	}
+}
+
+// TestVerifySymlinkedBundleBlocks covers the bundle leg of the same
+// property: the inventory runs before the signature bundle is read.
+func TestVerifySymlinkedBundleBlocks(t *testing.T) {
+	dir := testSkill(t)
+	keyPath, pubPath := keyFiles(t)
+	signWithKey(t, dir, keyPath)
+
+	bundlePath := manifest.ControlPath(dir, manifest.BundleFile)
+	raw, err := os.ReadFile(bundlePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(t.TempDir(), "swapped-bundle.json")
+	if err := os.WriteFile(target, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(bundlePath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, bundlePath); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	res := verifyWithPolicy(t, dir, keyPolicyJSON(pubPath, `,"requireTransparencyLog": false`))
+	if res.Allowed() {
+		t.Fatal("skill with symlinked bundle allowed")
+	}
+	if !hasCode(res, CodeMetadataUnexpected) {
+		t.Errorf("findings = %v, want %s", findingCodes(res), CodeMetadataUnexpected)
+	}
+}
+
+// TestVerifyRemovedControlDirStillMissing confirms the reordered inventory
+// preserves the missing-metadata result for a skill whose control directory
+// is gone entirely.
+func TestVerifyRemovedControlDirStillMissing(t *testing.T) {
+	dir := testSkill(t)
+	keyPath, pubPath := keyFiles(t)
+	signWithKey(t, dir, keyPath)
+
+	if err := os.RemoveAll(filepath.Join(dir, manifest.ControlDir)); err != nil {
+		t.Fatal(err)
+	}
+
+	res := verifyWithPolicy(t, dir, keyPolicyJSON(pubPath, `,"requireTransparencyLog": false`))
+	if res.Allowed() || !hasCode(res, CodeMetadataMissing) {
+		t.Fatalf("missing control dir not blocked with missing metadata: %+v", res.Findings)
+	}
+}
+
 // ---- Skill bindings ----
 
 func TestVerifySkillNameBinding(t *testing.T) {
